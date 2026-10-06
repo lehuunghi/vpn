@@ -18,6 +18,12 @@ Khởi động máy chủ, mở giao diện quản trị, tạo thiết bị và
 VPN trên mô-đun WireGuard của nhân Linux, quản lý NAT và chuyển tiếp IP, đồng
 thời hiển thị thiết bị đang kết nối, tốc độ và lưu lượng sử dụng.
 
+## Container tự động trên GHCR
+
+Workflow tự build khi cập nhật `main` hoặc tạo tag `v*`, rồi đẩy image
+`ghcr.io/lehuunghi/vpn20` cho AMD64 và ARM64. Xem [hướng dẫn GHCR](docs/GHCR.md).
+
+
 ## Chức năng
 
 - **Quản lý thiết bị:** tạo, sửa, bật, ngắt kết nối và xóa. Máy chủ có thể tạo
