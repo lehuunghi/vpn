@@ -94,11 +94,11 @@ def main():
     draw = ImageDraw.Draw(social)
     draw.text((494, 118), "VPN20", font=font(112, True), fill="#eaf6f6")
     draw.text((500, 269), COMPANY, font=font(40), fill=TEAL)
-    draw.text((500, 342), "Secure VPN management", font=font(36), fill="#a3c3cb")
-    draw.text((500, 398), "One container · 2FA · live dashboard",
+    draw.text((500, 342), "Quản lý VPN an toàn", font=font(36), fill="#a3c3cb")
+    draw.text((500, 398), "Một container · 2FA · cập nhật trực tiếp",
               font=font(28), fill="#a3c3cb")
     draw.line((96, 520, 1184, 520), fill="#21505f", width=2)
-    draw.text((96, 548), "github.com/lehuunghi/vpn", font=font(30), fill="#eaf6f6")
+    draw.text((96, 548), "https://20.com.vn", font=font(30), fill="#eaf6f6")
     social.convert("RGB").save(OUT / "vpn20-social.png")
 
     mark(48).save(PUB / "favicon.ico", sizes=[(16, 16), (32, 32), (48, 48)])

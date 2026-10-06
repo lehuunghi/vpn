@@ -10,18 +10,18 @@ import { Legal } from "./Legal";
 // Account is reached through the user menu, so it is not a nav item.
 const groups = [
   {
-    label: "Overview",
+    label: "Tổng quan",
     items: [
-      { href: "/", label: "Dashboard", icon: LayoutDashboard },
-      { href: "/peers", label: "Peers", icon: Activity },
+      { href: "/", label: "Bảng điều khiển", icon: LayoutDashboard },
+      { href: "/peers", label: "Thiết bị", icon: Activity },
     ],
   },
   {
-    label: "Administration",
+    label: "Quản trị",
     items: [
-      { href: "/settings", label: "Settings", icon: Settings },
-      { href: "/users", label: "Users", icon: Users },
-      { href: "/audit", label: "Audit log", icon: ClipboardList },
+      { href: "/settings", label: "Cài đặt", icon: Settings },
+      { href: "/users", label: "Người dùng", icon: Users },
+      { href: "/audit", label: "Nhật ký hoạt động", icon: ClipboardList },
     ],
   },
 ];
@@ -34,8 +34,8 @@ function isActive(href: string, location: string) {
 function LivePill() {
   const { connected } = useLive();
   return (
-    <span className={`live-pill${connected ? " on" : ""}`} title={connected ? "Live updates connected" : "Live updates reconnecting"}>
-      <i /> {connected ? "Live" : "Reconnecting"}
+    <span className={`live-pill${connected ? " on" : ""}`} title={connected ? "Đã kết nối cập nhật trực tiếp" : "Đang kết nối lại cập nhật trực tiếp"}>
+      <i /> {connected ? "Trực tiếp" : "Đang kết nối lại"}
     </span>
   );
 }
@@ -46,7 +46,7 @@ export function Layout({ children }: { children: ReactNode }) {
     <div className="shell">
       {/* Phones and narrow windows: brand and account controls up top. */}
       <header className="topbar">
-        <Link href="/" className="brand" aria-label="VPN20 dashboard">
+        <Link href="/" className="brand" aria-label="Bảng điều khiển VPN20">
           <Mark size={30} />
           <span className="brand-name">VPN20</span>
         </Link>
@@ -59,14 +59,14 @@ export function Layout({ children }: { children: ReactNode }) {
 
       {/* Desktop: everything lives in the sidebar. */}
       <aside className="sidebar">
-        <Link href="/" className="brand" aria-label="VPN20 dashboard">
+        <Link href="/" className="brand" aria-label="Bảng điều khiển VPN20">
           <Mark size={34} />
           <span>
             <span className="brand-name">VPN20</span>
             <span className="brand-sub">Công ty TNHH TN20</span>
           </span>
         </Link>
-        <nav className="nav" aria-label="Main">
+        <nav className="nav" aria-label="Điều hướng chính">
           {groups.map((g) => (
             <div className="nav-group" key={g.label}>
               <div className="nav-label">{g.label}</div>
@@ -97,7 +97,7 @@ export function Layout({ children }: { children: ReactNode }) {
       </main>
 
       {/* Phones: primary navigation as a tab bar within thumb reach. */}
-      <nav className="tabbar" aria-label="Main">
+      <nav className="tabbar" aria-label="Điều hướng chính">
         {all.map((it) => {
           const Icon = it.icon;
           const active = isActive(it.href, location);

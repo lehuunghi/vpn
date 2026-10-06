@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import type { TrafficPoint } from "../api";
 import { bytes } from "../format";
+import { DEFAULT_LOCALE } from "../locale";
 
 // Both charts are plain SVG: no library, no runtime dependency, and they
 // pick their colours up from the CSS variables so light and dark just work.
@@ -43,14 +44,14 @@ export function TrafficChart({ points, from, to, bucketSeconds = 300 }: { points
     for (let i = 0; i <= n; i++) {
       const t = from + (span * i) / n;
       const d = new Date(t);
-      const label = span > 2 * 86400 * 1000 ? d.toLocaleDateString(undefined, { month: "short", day: "numeric" }) : d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+      const label = span > 2 * 86400 * 1000 ? d.toLocaleDateString(DEFAULT_LOCALE, { month: "short", day: "numeric" }) : d.toLocaleTimeString(DEFAULT_LOCALE, { hour: "2-digit", minute: "2-digit" });
       xTicks.push({ x: padL + (i / n) * (W - padL - padR), label });
     }
     return { rxPath: path("rx"), txPath: path("tx"), max, ticks, xTicks };
   }, [points, from, to, bucketSeconds]);
 
   return (
-    <svg className="chart" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label="Traffic over time">
+    <svg className="chart" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label="Lưu lượng theo thời gian">
       {ticks.map((t) => (
         <g key={t.v}>
           <line x1={padL} x2={W - padR} y1={t.y} y2={t.y} stroke="var(--line)" strokeWidth="1" />
@@ -66,7 +67,7 @@ export function TrafficChart({ points, from, to, bucketSeconds = 300 }: { points
           {t.label}
         </text>
       ))}
-      <title>peak {bytes(max)} per bucket</title>
+      <title>Đỉnh {bytes(max)} mỗi khoảng thời gian</title>
     </svg>
   );
 }
@@ -91,10 +92,10 @@ export function Legend() {
   return (
     <div className="legend">
       <span>
-        <i style={{ background: "var(--rx)" }} /> received from peers
+        <i style={{ background: "var(--rx)" }} /> nhận từ thiết bị
       </span>
       <span>
-        <i style={{ background: "var(--tx)" }} /> sent to peers
+        <i style={{ background: "var(--tx)" }} /> gửi đến thiết bị
       </span>
     </div>
   );

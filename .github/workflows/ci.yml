@@ -28,6 +28,7 @@ jobs:
       - working-directory: web
         run: |
           npm ci --ignore-scripts --no-audit --no-fund
+          npm run test:locale
           npm run build
 
   go:

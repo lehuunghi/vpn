@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api, ApiError, type Me, type Snapshot } from "./api";
+import { localizeError } from "./locale";
 
 // --- auth -------------------------------------------------------------------
 
@@ -152,7 +153,7 @@ export function useToast() {
 }
 
 export function errorMessage(e: unknown): string {
-  if (e instanceof ApiError) return e.message;
-  if (e instanceof Error) return e.message;
-  return String(e);
+  if (e instanceof ApiError) return localizeError(e.message, e.status);
+  if (e instanceof Error) return localizeError(e.message);
+  return localizeError(String(e));
 }

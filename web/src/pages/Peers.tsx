@@ -70,7 +70,7 @@ export function Peers() {
       .sort((a, b) => {
         // Connected first, then by name.
         if (a.l.connected !== b.l.connected) return a.l.connected ? -1 : 1;
-        return a.p.name.localeCompare(b.p.name);
+        return a.p.name.localeCompare(b.p.name, "vi-VN");
       });
   }, [peers, snapshot, query, filter]);
 
@@ -90,29 +90,29 @@ export function Peers() {
     <>
       <div className="page-head">
         <div>
-          <h1>Peers</h1>
+          <h1>Thiết bị</h1>
           <p>
-            {peers.length} peer{peers.length === 1 ? "" : "s"} · {counts.connected} connected
+            {peers.length} thiết bị · {counts.connected} đang kết nối
           </p>
         </div>
         <div className="toolbar">
           <div className="search-wrap" style={{ position: "relative" }}>
             <Search size={14} style={{ position: "absolute", left: 9, top: 10, color: "var(--fg-faint)" }} />
-            <input className="input search" style={{ paddingLeft: 28 }} placeholder="Search name, address, key…" value={query} onChange={(e) => setQuery(e.target.value)} />
+            <input className="input search" style={{ paddingLeft: 28 }} placeholder="Tìm tên, địa chỉ, khóa…" value={query} onChange={(e) => setQuery(e.target.value)} />
           </div>
           <Segmented
             value={filter}
             onChange={setFilter}
             options={[
-              { value: "all", label: "All" },
-              { value: "connected", label: `Connected ${counts.connected}` },
-              { value: "offline", label: `Offline ${counts.offline}` },
-              { value: "disabled", label: `Disabled ${counts.disabled}` },
+              { value: "all", label: "Tất cả" },
+              { value: "connected", label: `Đang kết nối ${counts.connected}` },
+              { value: "offline", label: `Chưa kết nối ${counts.offline}` },
+              { value: "disabled", label: `Vô hiệu hóa ${counts.disabled}` },
             ]}
           />
           {isAdmin && (
             <button className="btn primary" onClick={() => setCreating(true)}>
-              <Plus /> New peer
+              <Plus /> Thêm thiết bị
             </button>
           )}
         </div>
@@ -120,19 +120,19 @@ export function Peers() {
 
       <div className="card">
         {rows.length === 0 ? (
-          <div className="empty">{peers.length === 0 ? "No peers yet. Create one and scan the QR code with the WireGuard app." : "Nothing matches."}</div>
+          <div className="empty">{peers.length === 0 ? "Chưa có thiết bị. Hãy thêm thiết bị và quét mã QR bằng ứng dụng WireGuard." : "Không có kết quả phù hợp."}</div>
         ) : (
           <div className="table-wrap">
             <table>
               <thead>
                 <tr>
-                  <th>Peer</th>
-                  <th>Address</th>
-                  <th className="hide-md">Endpoint</th>
-                  <th>Handshake</th>
-                  <th className="right hide-sm">Rate</th>
+                  <th>Thiết bị</th>
+                  <th>Địa chỉ</th>
+                  <th className="hide-md">Điểm kết nối</th>
+                  <th>Bắt tay</th>
+                  <th className="right hide-sm">Tốc độ</th>
                   <th className="hide-md"></th>
-                  <th className="right">Transfer</th>
+                  <th className="right">Dữ liệu truyền</th>
                 </tr>
               </thead>
               <tbody>
@@ -141,11 +141,11 @@ export function Peers() {
                   return (
                     <tr key={p.id} className="clickable" onClick={() => navigate(`/peers/${p.id}`)}>
                       <td>
-                        <span className={`dot ${state}`} title={state} />
+                        <span className={`dot ${state}`} title={{ disabled: "Đã vô hiệu hóa", expired: "Đã hết hạn", on: "Đang kết nối", off: "Chưa kết nối" }[state]} />
                         {p.name}
-                        {!p.enabled && <span className="badge bad" style={{ marginLeft: 8 }}>disabled</span>}
-                        {p.enabled && p.expired && <span className="badge warn" style={{ marginLeft: 8 }}>expired</span>}
-                        {!p.serverKeys && <span className="badge" style={{ marginLeft: 8 }} title="The client holds its own private key">client key</span>}
+                        {!p.enabled && <span className="badge bad" style={{ marginLeft: 8 }}>đã vô hiệu hóa</span>}
+                        {p.enabled && p.expired && <span className="badge warn" style={{ marginLeft: 8 }}>đã hết hạn</span>}
+                        {!p.serverKeys && <span className="badge" style={{ marginLeft: 8 }} title="Thiết bị tự giữ khóa riêng">khóa thiết bị</span>}
                       </td>
                       <td className="mono nowrap">{p.ipv4}</td>
                       <td className="mono nowrap hide-md">{l.endpoint || <span className="faint">—</span>}</td>
@@ -170,7 +170,7 @@ export function Peers() {
           onClose={() => setCreating(false)}
           onSaved={(p) => {
             setCreating(false);
-            toast(`Peer ${p.name} created`);
+            toast(`Đã tạo thiết bị ${p.name}`);
             void load().then(() => {
               setCreated(p as Peer & { config: string });
               navigate(`/peers/${p.id}`);

@@ -4,6 +4,7 @@ import { ChevronDown, LogOut, Shield } from "lucide-react";
 import { useAuth } from "../state";
 import { ThemeSwitch } from "./ThemeSwitch";
 import { Legal } from "./Legal";
+import { roleLabel } from "../locale";
 
 // The signed-in user: avatar button that opens a small menu with the
 // account page, the theme switch and sign out. `placement` says which way
@@ -33,7 +34,7 @@ export function UserMenu({ placement, showName = false }: { placement: "up" | "d
   const initial = me.username.slice(0, 1).toUpperCase();
   return (
     <div className={`user-menu ${placement}`} ref={root}>
-      <button type="button" className={`user-btn${showName ? " wide" : ""}`} aria-haspopup="menu" aria-expanded={open} aria-label={showName ? undefined : `Account menu for ${me.username}`} onClick={() => setOpen((v) => !v)}>
+      <button type="button" className={`user-btn${showName ? " wide" : ""}`} aria-haspopup="menu" aria-expanded={open} aria-label={showName ? undefined : `Menu tài khoản của ${me.username}`} onClick={() => setOpen((v) => !v)}>
         <span className="avatar" aria-hidden="true">
           {initial}
         </span>
@@ -41,7 +42,7 @@ export function UserMenu({ placement, showName = false }: { placement: "up" | "d
           <>
             <span className="user-text">
               <span className="user-name">{me.username}</span>
-              <span className="user-role">{me.role}</span>
+              <span className="user-role">{roleLabel(me.role)}</span>
             </span>
             <ChevronDown size={15} className="user-chev" />
           </>
@@ -55,18 +56,18 @@ export function UserMenu({ placement, showName = false }: { placement: "up" | "d
             </span>
             <div className="user-text">
               <span className="user-name">{me.username}</span>
-              <span className="user-role">{me.role}</span>
+              <span className="user-role">{roleLabel(me.role)}</span>
             </div>
           </div>
           <Link href="/account" role="menuitem" className="menu-item" onClick={() => setOpen(false)}>
-            <Shield size={16} /> Account &amp; security
+            <Shield size={16} /> Tài khoản &amp; bảo mật
           </Link>
           <div className="menu-row">
-            <span className="menu-label">Theme</span>
+            <span className="menu-label">Giao diện</span>
             <ThemeSwitch icons={false} />
           </div>
           <button type="button" role="menuitem" className="menu-item" onClick={() => void signOut()}>
-            <LogOut size={16} /> Sign out
+            <LogOut size={16} /> Đăng xuất
           </button>
           <div className="menu-foot">
             <Legal />

@@ -1,3 +1,5 @@
+import { DEFAULT_LOCALE, number } from "./locale";
+
 const units = ["B", "KB", "MB", "GB", "TB", "PB"];
 
 export function bytes(n: number): string {
@@ -9,15 +11,15 @@ export function bytes(n: number): string {
     i++;
   }
   const digits = i === 0 ? 0 : v < 10 ? 2 : v < 100 ? 1 : 0;
-  return `${v.toFixed(digits)} ${units[i]}`;
+  return `${number(v, digits)} ${units[i]}`;
 }
 
 export function rate(bytesPerSecond: number): string {
   const bits = bytesPerSecond * 8;
-  if (bits < 1000) return `${Math.round(bits)} bit/s`;
-  if (bits < 1e6) return `${(bits / 1e3).toFixed(bits < 1e4 ? 1 : 0)} kbit/s`;
-  if (bits < 1e9) return `${(bits / 1e6).toFixed(bits < 1e7 ? 2 : 1)} Mbit/s`;
-  return `${(bits / 1e9).toFixed(2)} Gbit/s`;
+  if (bits < 1000) return `${number(Math.round(bits))} bit/s`;
+  if (bits < 1e6) return `${number(bits / 1e3, bits < 1e4 ? 1 : 0)} kbit/s`;
+  if (bits < 1e9) return `${number(bits / 1e6, bits < 1e7 ? 2 : 1)} Mbit/s`;
+  return `${number(bits / 1e9, 2)} Gbit/s`;
 }
 
 export function isZeroTime(s?: string): boolean {
@@ -25,14 +27,14 @@ export function isZeroTime(s?: string): boolean {
 }
 
 export function ago(s?: string, now = Date.now()): string {
-  if (isZeroTime(s)) return "never";
+  if (isZeroTime(s)) return "chưa từng";
   const t = new Date(s!).getTime();
   const d = Math.max(0, Math.round((now - t) / 1000));
-  if (d < 5) return "just now";
-  if (d < 60) return `${d}s ago`;
-  if (d < 3600) return `${Math.floor(d / 60)}m ago`;
-  if (d < 86400) return `${Math.floor(d / 3600)}h ${Math.floor((d % 3600) / 60)}m ago`;
-  return `${Math.floor(d / 86400)}d ago`;
+  if (d < 5) return "vừa xong";
+  if (d < 60) return `${d} giây trước`;
+  if (d < 3600) return `${Math.floor(d / 60)} phút trước`;
+  if (d < 86400) return `${Math.floor(d / 3600)} giờ ${Math.floor((d % 3600) / 60)} phút trước`;
+  return `${Math.floor(d / 86400)} ngày trước`;
 }
 
 export function duration(from?: string, now = Date.now()): string {
@@ -41,14 +43,14 @@ export function duration(from?: string, now = Date.now()): string {
   const h = Math.floor(d / 3600);
   const m = Math.floor((d % 3600) / 60);
   const s = d % 60;
-  if (h > 0) return `${h}h ${m}m`;
-  if (m > 0) return `${m}m ${s}s`;
-  return `${s}s`;
+  if (h > 0) return `${h} giờ ${m} phút`;
+  if (m > 0) return `${m} phút ${s} giây`;
+  return `${s} giây`;
 }
 
 export function dateTime(s?: string): string {
   if (isZeroTime(s)) return "";
-  return new Date(s!).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+  return new Date(s!).toLocaleString(DEFAULT_LOCALE, { dateStyle: "medium", timeStyle: "short" });
 }
 
 export function shortKey(k: string): string {

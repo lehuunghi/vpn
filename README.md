@@ -1,162 +1,164 @@
 <p align="center">
-  <img src="docs/brand/vpn20-mark-256.png" width="128" height="128" alt="VPN20 shield logo">
+  <img src="docs/brand/vpn20-mark-256.png" width="128" height="128" alt="Biểu tượng khiên VPN20">
 </p>
 
 # VPN20
 
 **VPN20 — Công ty TNHH TN20**
 
-Source, bug reports and feature requests: **[github.com/lehuunghi/vpn](https://github.com/lehuunghi/vpn)**.
+Website: **[20.com.vn](https://20.com.vn)**
 
-A self-hosted WireGuard server with a secure web console, in one container.
+Mã nguồn và báo lỗi: **[github.com/lehuunghi/vpn](https://github.com/lehuunghi/vpn)**
 
-Start it, open the console, create a peer, scan the QR code. VPN20 runs the
-tunnel on the kernel's WireGuard module, keeps the NAT rules and forwarding
-sysctls in order, and gives you a dashboard that shows who is connected, how
-much they are moving, and a button to cut them off.
+VPN20 là máy chủ VPN WireGuard tự lưu trữ, tích hợp giao diện quản trị web trong
+một container. **Tiếng Việt là ngôn ngữ mặc định** của giao diện, thông báo thao
+tác, định dạng ngày giờ và số liệu.
 
-## What it does
+Khởi động máy chủ, mở giao diện quản trị, tạo thiết bị và quét mã QR. VPN20 chạy
+VPN trên mô-đun WireGuard của nhân Linux, quản lý NAT và chuyển tiếp IP, đồng
+thời hiển thị thiết bị đang kết nối, tốc độ và lưu lượng sử dụng.
 
-- **Peers.** Create, edit, disable, delete. The server generates the key
-  pair (and a preshared key) and shows a QR code and a `.conf` download; or
-  the client brings its own public key and the private key never leaves the
-  device. Pin a tunnel address or let vpn20 allocate one. Set an expiry and the
-  peer is disconnected on time. Rotate keys in one click.
-- **Who is connected.** Live status from the interface counters every two
-  seconds: endpoint, last handshake, session length, current rate, total
-  transfer. Usage history in five-minute buckets, per peer and overall, kept
-  for 90 days.
-- **Disconnect them.** *Disconnect* removes the peer from the interface and
-  keeps it off until you enable it again. *Reset session* drops the current
-  session and lets the client handshake afresh.
-- **Fast.** Kernel data plane over netlink, no user-space hop. Tuned
-  sysctls, TCP MSS clamping, optional host networking. Falls back to
-  `wireguard-go` on hosts without the module and tells you so. See
-  [docs/performance.md](docs/performance.md).
-- **Locked down.** argon2id passwords, two-factor authentication with
-  recovery codes, viewer and administrator roles, rate-limited login,
-  same-origin enforcement, strict CSP, built-in TLS if you want it, and an
-  audit log of every change (including every time a peer's configuration is
-  viewed). See [SECURITY.md](SECURITY.md).
-- **Observable.** `/api/health` for a liveness probe and `/metrics` in
-  Prometheus format, guarded by a bearer token.
-- **Self-contained.** One static Go binary, one SQLite file under `/data`,
-  no other services. Multi-arch image for amd64 and arm64.
+## Chức năng
 
-## Quick start
+- **Quản lý thiết bị:** tạo, sửa, bật, ngắt kết nối và xóa. Máy chủ có thể tạo
+  cặp khóa cùng khóa chia sẻ trước, cung cấp mã QR và tệp `.conf`; hoặc thiết
+  bị tự cung cấp khóa công khai để khóa riêng luôn nằm trên thiết bị. Tự cấp
+  địa chỉ VPN hoặc chỉ định thủ công. Hỗ trợ thời hạn kết nối và thay khóa.
+- **Theo dõi trực tiếp:** điểm kết nối, lần bắt tay gần nhất, thời gian phiên,
+  tốc độ và tổng lưu lượng được cập nhật mỗi 2 giây. Lịch sử theo từng thiết
+  bị và toàn hệ thống được ghi mỗi 5 phút, giữ trong 90 ngày.
+- **Ngắt và đặt lại phiên:** ngắt kết nối sẽ gỡ thiết bị khỏi giao diện mạng,
+  giữ trạng thái ngắt cho đến khi bật lại. Đặt lại phiên cho phép thiết bị
+  thiết lập lại kết nối.
+- **Hiệu năng:** xử lý trong nhân qua netlink, điều chỉnh sysctl, TCP MSS và
+  hỗ trợ mạng host. Tự chuyển sang `wireguard-go` khi thiếu mô-đun nhân.
+  Xem [docs/performance.md](docs/performance.md).
+- **Bảo mật:** mật khẩu argon2id, xác thực hai bước và mã khôi phục, vai trò
+  quản trị/người xem, giới hạn đăng nhập, kiểm tra cùng nguồn, CSP, TLS và
+  nhật ký thao tác, kể cả việc xem cấu hình thiết bị. Xem [SECURITY.md](SECURITY.md).
+- **Giám sát:** `/api/health` kiểm tra tình trạng; `/metrics` cung cấp dữ liệu
+  Prometheus và yêu cầu mã truy cập hoặc phiên đăng nhập.
+- **Tự chứa:** một chương trình Go, một cơ sở dữ liệu SQLite trong `/data`,
+  không cần dịch vụ bổ sung. Hỗ trợ kiến trúc amd64 và arm64.
+
+## Cài đặt nhanh
 
 ```sh
 git clone --branch main https://github.com/lehuunghi/vpn.git
 cd vpn
-# edit VPN20_ENDPOINT (your public hostname or IP), then:
+# Sửa VPN20_ENDPOINT trong docker-compose.yml thành tên miền hoặc IP công khai
 docker compose up -d --build
 ```
 
-Open <http://localhost:51821>, create the first administrator, and add a
-peer. Point the WireGuard app on your phone at the QR code.
+Mở <http://localhost:51821>, tạo quản trị viên đầu tiên và thêm thiết bị.
+Dùng ứng dụng WireGuard trên điện thoại để quét mã QR.
 
-The console is bound to localhost in the compose file on purpose. To reach
-it from elsewhere, either set `VPN20_TLS_SELF_SIGNED: "true"` and bind to the
-address you need, or put a TLS-terminating reverse proxy in front of it and
-list the proxy in `VPN20_TRUSTED_PROXIES`.
+Giao diện quản trị mặc định chỉ lắng nghe trên localhost trong tệp Compose.
+Để truy cập từ máy khác, bật `VPN20_TLS_SELF_SIGNED: "true"` và ánh xạ địa chỉ
+cần thiết, hoặc dùng reverse proxy kết thúc TLS và khai báo proxy trong
+`VPN20_TRUSTED_PROXIES`.
 
-For the fastest configuration, `docker-compose.host.yml` runs on the host
-network; [docs/performance.md](docs/performance.md) says when that is worth
-it and which host sysctls to set.
+`docker-compose.host.yml` chạy trực tiếp trên mạng host để có hiệu năng cao.
+Xem [docs/performance.md](docs/performance.md) về các tham số sysctl liên quan.
 
-### Requirements
+### Yêu cầu
 
-- Docker (or Podman) on a Linux host with a kernel from 5.6 on. Older kernels
-  work with `wireguard-dkms` installed on the host, or fall back to the
-  slower user-space data plane automatically.
-- The container needs `NET_ADMIN` and the forwarding sysctls in the compose
-  file. `SYS_MODULE` is not needed unless the host has never loaded the
-  module and cannot autoload it.
-- UDP port 51820 (or whatever you choose) reachable from the internet.
+- Docker hoặc Podman trên Linux, ưu tiên nhân từ 5.6 trở lên. Nhân cũ có thể
+  dùng `wireguard-dkms`, hoặc chuyển sang xử lý trong không gian người dùng.
+- Container cần quyền `NET_ADMIN` và các tham số chuyển tiếp IP trong Compose.
+  Chỉ cần `SYS_MODULE` khi máy chủ chưa nạp và không tự nạp được mô-đun.
+- Cổng UDP 51820 hoặc cổng đã chọn phải truy cập được từ Internet.
 
-## Configuration
+## Cấu hình
 
-Infrastructure is configured through the environment; everything an
-administrator might change while the server runs lives in the database and
-is edited in the console under **Settings** (endpoint, DNS, default client
-routes, MTU, keepalive, peer isolation, MSS clamping, preshared keys).
+Hạ tầng được cấu hình qua biến môi trường. Các giá trị có thể thay đổi khi
+máy chủ đang chạy được lưu trong cơ sở dữ liệu và chỉnh ở mục **Cài đặt**:
+địa chỉ kết nối, DNS, định tuyến mặc định, MTU, duy trì kết nối, cô lập thiết
+bị, TCP MSS và khóa chia sẻ trước.
 
-| Variable | Default | Meaning |
+| Biến môi trường | Mặc định | Ý nghĩa |
 | --- | --- | --- |
-| `VPN20_ENDPOINT` | | Public hostname or IP for client configs. Also asked for at first-run setup. |
-| `VPN20_PORT` | `51820` | UDP listen port. |
-| `VPN20_SUBNET` | `10.8.0.0/24` | IPv4 tunnel network; the server takes the first address. |
-| `VPN20_SUBNET6` | | IPv6 tunnel network, e.g. `fd42:42:42::/64`. Off when empty. |
-| `VPN20_DNS` | `1.1.1.1, 1.0.0.1` | Resolvers handed to clients on first run. |
-| `VPN20_INTERFACE` | `wg0` | Interface name. |
-| `VPN20_EGRESS_INTERFACE` | auto | Interface to masquerade on. Auto uses the default route. |
-| `VPN20_HTTP_LISTEN` | `:51821` | Console listen address. |
-| `VPN20_TLS_SELF_SIGNED` | `false` | Serve HTTPS with a certificate generated into `/data`. |
-| `VPN20_TLS_CERT`, `VPN20_TLS_KEY` | | Serve HTTPS with your own certificate. |
-| `VPN20_SECURE_COOKIES` | `false` | Mark cookies `Secure` when TLS terminates at a proxy. |
-| `VPN20_TRUSTED_PROXIES` | | CIDRs whose `X-Forwarded-For` is believed. |
-| `VPN20_METRICS_TOKEN` | | Bearer token for `/metrics`. A signed-in session works too. |
-| `VPN20_SESSION_IDLE` | `12h` | Sign out after this much inactivity. |
-| `VPN20_SESSION_MAX` | `168h` | Sign out after this long regardless. |
-| `VPN20_TRAFFIC_RETENTION` | `2160h` | How long usage history is kept (90 days). |
-| `VPN20_POLL_INTERVAL` | `2s` | How often the interface counters are read. |
-| `VPN20_BACKEND` | `auto` | `kernel`, `userspace` or `mock`. Auto prefers the kernel. |
-| `VPN20_MANAGE_FIREWALL` | `true` | Set to `false` if the host owns the NAT rules. |
-| `VPN20_MANAGE_SYSCTL` | `true` | Set to `false` if the host has tuned itself. |
-| `VPN20_DATA_DIR` | `/data` | Where the database and TLS files live. |
-| `VPN20_LOG_LEVEL`, `VPN20_LOG_JSON` | `info`, `false` | Logging. |
+| `VPN20_ENDPOINT` | | Tên miền hoặc IP công khai cho thiết bị; cũng được hỏi lúc thiết lập. |
+| `VPN20_PORT` | `51820` | Cổng UDP lắng nghe. |
+| `VPN20_SUBNET` | `10.8.0.0/24` | Mạng IPv4 của VPN; máy chủ dùng địa chỉ đầu tiên. |
+| `VPN20_SUBNET6` | | Mạng IPv6, ví dụ `fd42:42:42::/64`. Để trống để tắt. |
+| `VPN20_DNS` | `1.1.1.1, 1.0.0.1` | DNS cấp cho thiết bị khi chạy lần đầu. |
+| `VPN20_INTERFACE` | `wg0` | Tên giao diện mạng. |
+| `VPN20_EGRESS_INTERFACE` | tự động | Giao diện NAT ra ngoài; tự động dùng tuyến mặc định. |
+| `VPN20_HTTP_LISTEN` | `:51821` | Địa chỉ lắng nghe của giao diện quản trị. |
+| `VPN20_TLS_SELF_SIGNED` | `false` | Bật HTTPS bằng chứng chỉ tự tạo, lưu trong `/data`. |
+| `VPN20_TLS_CERT`, `VPN20_TLS_KEY` | | Bật HTTPS bằng chứng chỉ và khóa của bạn. |
+| `VPN20_SECURE_COOKIES` | `false` | Đánh dấu cookie `Secure` khi TLS kết thúc tại proxy. |
+| `VPN20_TRUSTED_PROXIES` | | CIDR của proxy được tin cậy khi đọc `X-Forwarded-For`. |
+| `VPN20_METRICS_TOKEN` | | Mã bearer cho `/metrics`; phiên đăng nhập cũng được chấp nhận. |
+| `VPN20_SESSION_IDLE` | `12h` | Tự đăng xuất sau khoảng thời gian không hoạt động. |
+| `VPN20_SESSION_MAX` | `168h` | Thời hạn tối đa của phiên đăng nhập. |
+| `VPN20_TRAFFIC_RETENTION` | `2160h` | Thời gian lưu lịch sử lưu lượng, tương đương 90 ngày. |
+| `VPN20_POLL_INTERVAL` | `2s` | Chu kỳ đọc bộ đếm giao diện. |
+| `VPN20_BACKEND` | `auto` | `kernel`, `userspace` hoặc `mock`; tự động ưu tiên nhân. |
+| `VPN20_MANAGE_FIREWALL` | `true` | Đặt `false` nếu máy chủ tự quản lý quy tắc NAT. |
+| `VPN20_MANAGE_SYSCTL` | `true` | Đặt `false` nếu máy chủ đã được điều chỉnh sysctl. |
+| `VPN20_DATA_DIR` | `/data` | Thư mục cơ sở dữ liệu và tệp TLS. |
+| `VPN20_DB` | `/data/vpn20.db` | Đường dẫn SQLite; mặc định theo `VPN20_DATA_DIR`. |
+| `VPN20_LOG_LEVEL`, `VPN20_LOG_JSON` | `info`, `false` | Mức log và định dạng JSON. |
+| `VPN20_DATA_VOLUME` | `vpn20-data` | Tên volume Docker dùng bởi các tệp Compose. |
 
-## Locked out?
+## Khôi phục quyền quản trị
 
 ```sh
 docker exec -it vpn20 vpn20 reset-password admin
 ```
 
-sets a new password for that user, clears their second factor and ends
-their sessions. It runs against the same database, so no restart is needed.
+Lệnh đặt mật khẩu mới, xóa xác thực hai bước và kết thúc các phiên của người
+dùng đó. Lệnh dùng cùng cơ sở dữ liệu, không cần khởi động lại.
 
-## Client setup
+## Kết nối thiết bị
 
-Any WireGuard client works: the official apps on iOS, Android, macOS and
-Windows, `wg-quick` on Linux, and routers that speak WireGuard. Scan the QR
-code from the peer's **Configuration** tab, or download the `.conf`. The
-default configuration routes everything through the tunnel; change **Client
-routes** on the peer (or the default under Settings) to the tunnel subnet
-alone for split tunnelling.
+Dùng ứng dụng WireGuard trên iOS, Android, macOS, Windows, `wg-quick` trên
+Linux hoặc bộ định tuyến hỗ trợ WireGuard. Quét mã QR ở thẻ **Cấu hình** của
+thiết bị, hoặc tải tệp `.conf`.
+
+Cấu hình mặc định gửi toàn bộ lưu lượng qua VPN. Để định tuyến một phần, đổi
+**Định tuyến thiết bị** thành mạng VPN hoặc mạng cần truy cập.
 
 ## API
 
-Everything the console does goes through `/api/…` with the session cookie.
+Giao diện web sử dụng `/api/…` cùng cookie phiên đăng nhập. Một số endpoint:
 `GET /api/peers`, `POST /api/peers`, `GET /api/peers/{id}/config`,
-`POST /api/peers/{id}/disable` and friends are stable enough to script
-against; the shapes are in `internal/server/api.go`. A cross-site request
-without a same-origin `Sec-Fetch-Site` or `Origin` header is refused, so
-call it from the same origin or from a non-browser client.
+`POST /api/peers/{id}/disable`. Cấu trúc dữ liệu nằm trong
+`internal/server/api.go`.
 
-## Building from source
+Yêu cầu từ trình duyệt khác nguồn bị từ chối khi không có header
+`Sec-Fetch-Site` hoặc `Origin` hợp lệ. Hãy gọi từ cùng nguồn hoặc từ chương
+trình phía máy chủ. Tên trường, endpoint, vai trò `admin`/`viewer` và mã sự
+kiện API giữ nguyên; giao diện hiển thị nhãn bằng tiếng Việt.
+
+## Biên dịch từ mã nguồn
 
 ```sh
 cd web && npm ci && npm run build && cd ..
 go build ./cmd/vpn20
 ```
 
-The UI is embedded in the binary. `docker build -t vpn20 .` does both steps.
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the development loop against the
-mock data plane, which needs no privileges.
+Giao diện được nhúng vào chương trình. `docker build -t vpn20 .` thực hiện cả
+hai bước. Xem [CONTRIBUTING.md](CONTRIBUTING.md) để phát triển với chế độ mô
+phỏng không cần quyền quản trị hệ thống.
 
-## Upgrading an existing installation
+## Nâng cấp bản cài đặt đang dùng
 
-Back up the existing data volume before upgrading. Configuration now uses
-`VPN20_*` environment variables, the command is `vpn20`, the database defaults
-to `/data/vpn20.db`, and the firewall table is `vpn20`. Set `VPN20_DB` to your
-existing database path and `VPN20_DATA_VOLUME` to your existing Docker volume
-name to keep all users, keys, peers and history. Stop the previous container
-before starting VPN20 and remove its old firewall table after shutdown.
-Existing browser sessions end; sign in again. Existing authenticator codes
-continue to work; new QR enrollments use the VPN20 issuer.
+Sao lưu volume dữ liệu trước khi nâng cấp. Bản VPN20 dùng biến môi trường
+`VPN20_*`, lệnh `vpn20`, cơ sở dữ liệu mặc định `/data/vpn20.db` và bảng
+tường lửa `vpn20`.
 
-## Licence
+Đặt `VPN20_DB` trỏ đến cơ sở dữ liệu hiện có và `VPN20_DATA_VOLUME` trùng tên
+volume đang dùng để giữ người dùng, khóa, thiết bị và lịch sử. Dừng container
+cũ trước khi khởi động VPN20; gỡ bảng tường lửa cũ sau khi dừng.
 
-AGPL-3.0-or-later. See [LICENSE](LICENSE) and [NOTICE](NOTICE) for upstream
-copyright and third-party notices. VPN20 branding and modifications are
-maintained by Công ty TNHH TN20.
+Phiên đăng nhập trình duyệt cũ sẽ kết thúc; hãy đăng nhập lại. Mã xác thực
+đang dùng vẫn hoạt động; mã QR đăng ký mới mang tên VPN20.
+
+## Giấy phép
+
+AGPL-3.0-or-later. Xem [LICENSE](LICENSE) và [NOTICE](NOTICE) để biết thông
+tin bản quyền nguồn gốc và giấy phép bên thứ ba. Thương hiệu VPN20 và các
+chỉnh sửa được duy trì bởi **[Công ty TNHH TN20](https://20.com.vn)**.

@@ -46,24 +46,24 @@ export function Login() {
             </div>
             <div className="brand-name">VPN20</div>
           </div>
-          <h1>{stage === "password" ? "Sign in" : "Second factor"}</h1>
+          <h1>{stage === "password" ? "Đăng nhập" : "Xác thực hai bước"}</h1>
           {error && <div className="error">{error}</div>}
           {stage === "password" ? (
             <>
-              <Field label="Username">
+              <Field label="Tên đăng nhập">
                 <input className="input" autoFocus autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} required />
               </Field>
-              <Field label="Password">
+              <Field label="Mật khẩu">
                 <input className="input" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
               </Field>
             </>
           ) : (
-            <Field label="Authenticator code" hint="Or one of your recovery codes.">
+            <Field label="Mã xác thực" hint="Hoặc nhập một mã khôi phục.">
               <input className="input" autoFocus autoComplete="one-time-code" inputMode="numeric" value={code} onChange={(e) => setCode(e.target.value)} required />
             </Field>
           )}
           <button className="btn primary" type="submit" disabled={busy} style={{ width: "100%", justifyContent: "center" }}>
-            {busy ? "…" : stage === "password" ? "Sign in" : "Verify"}
+            {busy ? "…" : stage === "password" ? "Đăng nhập" : "Xác minh"}
           </button>
           <Legal center />
         </div>

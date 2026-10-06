@@ -12,7 +12,7 @@ import { Account } from "./pages/Account";
 
 function Gate() {
   const { me, loading, needsSetup } = useAuth();
-  if (loading) return <div className="auth">Loading…</div>;
+  if (loading) return <div className="auth">Đang tải…</div>;
   if (needsSetup) return <Setup />;
   if (!me) return <Login />;
   return (
@@ -27,7 +27,7 @@ function Gate() {
           <Route path="/audit" component={Audit} />
           <Route path="/account" component={Account} />
           <Route>
-            <div className="empty">Nothing here.</div>
+            <div className="empty">Không tìm thấy trang.</div>
           </Route>
         </Switch>
       </Layout>

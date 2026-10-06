@@ -55,81 +55,81 @@ export function PeerForm({ peer, settings, onClose, onSaved }: { peer?: Peer; se
 
   return (
     <Modal
-      title={editing ? `Edit ${peer.name}` : "New peer"}
+      title={editing ? `Chỉnh sửa ${peer.name}` : "Thêm thiết bị"}
       onClose={onClose}
       footer={
         <>
           <button className="btn" type="button" onClick={onClose} disabled={busy}>
-            Cancel
+            Hủy
           </button>
           <button className="btn primary" type="submit" form="peer-form" disabled={busy}>
-            {busy ? "…" : editing ? "Save" : "Create peer"}
+            {busy ? "…" : editing ? "Lưu" : "Tạo thiết bị"}
           </button>
         </>
       }
     >
       <form id="peer-form" onSubmit={submit}>
         {error && <div className="error">{error}</div>}
-        <Field label="Name" hint="A device or a person: “Laptop”, “Phone”, “Office router”.">
+        <Field label="Tên" hint="Tên thiết bị hoặc người dùng, ví dụ: “Máy tính”, “Điện thoại”, “Bộ định tuyến văn phòng”.">
           <input className="input" autoFocus value={name} onChange={(e) => setName(e.target.value)} required maxLength={64} />
         </Field>
         {!editing && (
           <div className="field">
-            <label>Keys</label>
+            <label>Khóa</label>
             <div className="btn-row">
               <label className="btn sm" style={{ cursor: "pointer" }}>
-                <input type="radio" name="keys" checked={keyMode === "server"} onChange={() => setKeyMode("server")} /> Generate here (QR code)
+                <input type="radio" name="keys" checked={keyMode === "server"} onChange={() => setKeyMode("server")} /> Tạo tại đây (mã QR)
               </label>
               <label className="btn sm" style={{ cursor: "pointer" }}>
-                <input type="radio" name="keys" checked={keyMode === "client"} onChange={() => setKeyMode("client")} /> Client brings its own public key
+                <input type="radio" name="keys" checked={keyMode === "client"} onChange={() => setKeyMode("client")} /> Thiết bị cung cấp khóa công khai
               </label>
             </div>
-            <span className="hint">Generating here lets you scan a QR code. Bringing a key means the private key never leaves the client, but there is no QR code.</span>
+            <span className="hint">Tạo khóa tại đây để sử dụng mã QR. Nếu thiết bị tự cung cấp khóa, khóa riêng luôn nằm trên thiết bị và sẽ không có mã QR.</span>
           </div>
         )}
         {!editing && keyMode === "client" && (
-          <Field label="Client public key">
-            <input className="input mono" value={publicKey} onChange={(e) => setPublicKey(e.target.value)} placeholder="base64, 44 characters" required />
+          <Field label="Khóa công khai của thiết bị">
+            <input className="input mono" value={publicKey} onChange={(e) => setPublicKey(e.target.value)} placeholder="base64, 44 ký tự" required />
           </Field>
         )}
         {!advanced && (
           <button type="button" className="btn sm ghost" onClick={() => setAdvanced(true)} style={{ marginLeft: -8 }}>
-            More options…
+            Tùy chọn nâng cao…
           </button>
         )}
         {advanced && (
           <>
-            <Field label="Client routes (AllowedIPs)" hint="What the client sends through the tunnel. 0.0.0.0/0, ::/0 is everything; the tunnel subnet alone is split tunnelling.">
+            <Field label="Định tuyến thiết bị (AllowedIPs)" hint="Các mạng thiết bị gửi qua VPN. 0.0.0.0/0, ::/0 gửi toàn bộ lưu lượng; chỉ khai báo mạng VPN để định tuyến một phần.">
               <input className="input mono" value={routes} onChange={(e) => setRoutes(e.target.value)} />
             </Field>
             <div className="form-cols">
-              <Field label="DNS" hint={`Blank uses the server default (${settings.dns || "none"}).`}>
+              <Field label="DNS" hint={`Để trống để dùng mặc định máy chủ (${settings.dns || "không có"}).`}>
                 <input className="input" value={dns} onChange={(e) => setDns(e.target.value)} placeholder={settings.dns} />
               </Field>
-              <Field label="Keepalive (s)" hint={`0 uses the server default (${settings.keepalive}).`}>
+              <Field label="Duy trì kết nối (giây)" hint={`Đặt 0 để dùng mặc định máy chủ (${settings.keepalive}).`}>
                 <input className="input" type="number" min={0} max={65535} value={keepalive} onChange={(e) => setKeepalive(e.target.value)} />
               </Field>
-              <Field label="MTU" hint={`0 uses the server default (${settings.mtu}).`}>
+              <Field label="MTU" hint={`Đặt 0 để dùng mặc định máy chủ (${settings.mtu}).`}>
                 <input className="input" type="number" min={0} max={9000} value={mtu} onChange={(e) => setMtu(e.target.value)} />
               </Field>
-              <Field label="Expires" hint="The peer is disconnected at this time. Blank never expires.">
+              <Field label="Hết hạn" hint="Thiết bị sẽ bị ngắt kết nối vào thời điểm này. Để trống nếu không đặt thời hạn.">
                 <input className="input" type="datetime-local" value={expires} onChange={(e) => setExpires(e.target.value)} />
               </Field>
               {!editing && (
                 <>
-                  <Field label="IPv4 address" hint="Blank picks the next free one.">
-                    <input className="input mono" value={ipv4} onChange={(e) => setIpv4(e.target.value)} placeholder="auto" />
+                  <Field label="Địa chỉ IPv4" hint="Để trống để tự chọn địa chỉ còn trống.">
+                    <input className="input mono" value={ipv4} onChange={(e) => setIpv4(e.target.value)} placeholder="tự động" />
                   </Field>
-                  <Field label="IPv6 address" hint="Only when the server has an IPv6 subnet.">
-                    <input className="input mono" value={ipv6} onChange={(e) => setIpv6(e.target.value)} placeholder="auto" />
+                  <Field label="Địa chỉ IPv6" hint="Chỉ dùng khi máy chủ có mạng IPv6.">
+                    <input className="input mono" value={ipv6} onChange={(e) => setIpv6(e.target.value)} placeholder="tự động" />
                   </Field>
                 </>
               )}
             </div>
-            <Field label="Notes">
+            <Field label="Ghi chú">
               <textarea className="input" value={notes} onChange={(e) => setNotes(e.target.value)} maxLength={2000} />
             </Field>
-            <Check label="Enabled" hint="A disabled peer is removed from the interface and cannot connect." checked={enabled} onChange={setEnabled} />
+            <Check label="Đã bật" hint="Thiết bị bị vô hiệu hóa sẽ được gỡ khỏi giao diện mạng và không thể kết nối." checked={enabled} onChange={setEnabled} />
           </>
         )}
       </form>

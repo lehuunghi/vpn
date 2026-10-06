@@ -8,7 +8,8 @@
     "dev": "vite",
     "build": "tsc -p tsconfig.json --noEmit && vite build && touch ../internal/server/static/dist/.gitkeep",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:locale": "node --test tests/locale.test.mjs"
   },
   "dependencies": {
     "lucide-react": "^1.45.0",

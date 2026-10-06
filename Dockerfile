@@ -31,6 +31,7 @@ ENV VPN20_DATA_DIR=/data \
     VPN20_HTTP_LISTEN=:51821
 LABEL org.opencontainers.image.title="VPN20" \
     org.opencontainers.image.vendor="Công ty TNHH TN20" \
+    org.opencontainers.image.url="https://20.com.vn" \
     org.opencontainers.image.source="https://github.com/lehuunghi/vpn" \
     org.opencontainers.image.licenses="AGPL-3.0-or-later"
 VOLUME ["/data"]

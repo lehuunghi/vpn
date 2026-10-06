@@ -6,6 +6,7 @@ import { ago, bytes, duration, rate } from "../format";
 import { errorMessage, useLive, useNow, useToast } from "../state";
 import { Legend, TrafficChart } from "../components/charts";
 import { Segmented, copyText } from "../components/ui";
+import { backendLabel, technicalMessage } from "../locale";
 
 const rangeMs: Record<Range, number> = { "1h": 3600e3, "24h": 86400e3, "7d": 7 * 86400e3, "30d": 30 * 86400e3 };
 
@@ -48,85 +49,85 @@ export function Dashboard() {
     <>
       <div className="page-head">
         <div>
-          <h1>Dashboard</h1>
-          <p>{status ? `${status.interface} on UDP ${status.listenPort} · ${status.backend} data plane` : " "}</p>
+          <h1>Bảng điều khiển</h1>
+          <p>{status ? `${status.interface} qua UDP ${status.listenPort} · ${backendLabel(status.backend)}` : " "}</p>
         </div>
       </div>
       {error && <div className="error">{error}</div>}
       {status?.backend === "userspace" && (
         <div className="notice">
-          <AlertTriangle size={14} style={{ verticalAlign: -2 }} /> Running on the userspace data plane (wireguard-go). Load the <code>wireguard</code> kernel module on the host for several times the throughput.
+          <AlertTriangle size={14} style={{ verticalAlign: -2 }} /> Đang dùng chế độ xử lý trong không gian người dùng (wireguard-go). Nạp mô-đun <code>wireguard</code> vào nhân máy chủ để tăng tốc độ truyền lên nhiều lần.
         </div>
       )}
-      {status?.backend === "mock" && <div className="notice">Mock data plane: no real tunnel exists. Traffic and handshakes are simulated.</div>}
+      {status?.backend === "mock" && <div className="notice">Chế độ mô phỏng: không có VPN thực. Lưu lượng và quá trình bắt tay được mô phỏng.</div>}
       {status?.firewallError && (
         <div className="error">
-          <AlertTriangle size={14} style={{ verticalAlign: -2 }} /> Firewall rules were not applied: {status.firewallError}. Peers will connect but cannot reach beyond the server.
+          <AlertTriangle size={14} style={{ verticalAlign: -2 }} /> Không áp dụng được quy tắc tường lửa: {technicalMessage(status.firewallError)}. Thiết bị có thể kết nối nhưng không truy cập được mạng bên ngoài máy chủ.
         </div>
       )}
       {unapplied.some((s) => s.required) && (
         <div className="error">
-          <AlertTriangle size={14} style={{ verticalAlign: -2 }} /> IP forwarding is off and could not be enabled. Pass <code>net.ipv4.ip_forward=1</code> in the container's sysctls.
+          <AlertTriangle size={14} style={{ verticalAlign: -2 }} /> Chuyển tiếp IP đang tắt và không thể bật. Thêm <code>net.ipv4.ip_forward=1</code> vào cấu hình sysctl của container.
         </div>
       )}
 
       <div className="grid grid-4">
-        <Stat label="Connected" value={`${totals?.connected ?? 0}`} sub={`of ${totals?.active ?? 0} enabled · ${totals?.peers ?? 0} total`} />
-        <Stat label="Throughput" value={rate((totals?.rxRate ?? 0) + (totals?.txRate ?? 0))} sub={`↓ ${rate(totals?.rxRate ?? 0)} · ↑ ${rate(totals?.txRate ?? 0)}`} />
-        <Stat label="Received" value={bytes(totals?.rx ?? 0)} sub="from peers, all time" />
-        <Stat label="Sent" value={bytes(totals?.tx ?? 0)} sub="to peers, all time" />
+        <Stat label="Đang kết nối" value={`${totals?.connected ?? 0}`} sub={`trong ${totals?.active ?? 0} thiết bị đã bật · ${totals?.peers ?? 0} tổng cộng`} />
+        <Stat label="Tốc độ truyền" value={rate((totals?.rxRate ?? 0) + (totals?.txRate ?? 0))} sub={`↓ ${rate(totals?.rxRate ?? 0)} · ↑ ${rate(totals?.txRate ?? 0)}`} />
+        <Stat label="Đã nhận" value={bytes(totals?.rx ?? 0)} sub="từ thiết bị, từ trước đến nay" />
+        <Stat label="Đã gửi" value={bytes(totals?.tx ?? 0)} sub="đến thiết bị, từ trước đến nay" />
       </div>
 
       <div className="grid grid-main mt">
         <div className="card">
           <div className="card-head">
-            <h2>Traffic</h2>
+            <h2>Lưu lượng</h2>
             <div className="toolbar">
               <Legend />
-              <Segmented value={range} onChange={setRange} options={[{ value: "1h", label: "1h" }, { value: "24h", label: "24h" }, { value: "7d", label: "7d" }, { value: "30d", label: "30d" }]} />
+              <Segmented value={range} onChange={setRange} options={[{ value: "1h", label: "1 giờ" }, { value: "24h", label: "24 giờ" }, { value: "7d", label: "7 ngày" }, { value: "30d", label: "30 ngày" }]} />
             </div>
           </div>
           <div className="card-body">
             <TrafficChart points={series} from={now - rangeMs[range]} to={now} bucketSeconds={range === "30d" ? 3600 : 300} />
-            <div className="small faint">Five-minute buckets{range === "30d" ? ", shown per hour" : ""}. Live rates above update every couple of seconds.</div>
+            <div className="small faint">Dữ liệu theo mỗi 5 phút{range === "30d" ? ", hiển thị theo giờ" : ""}. Tốc độ trực tiếp phía trên được cập nhật vài giây một lần.</div>
           </div>
         </div>
         <div className="card">
           <div className="card-head">
-            <h2>Server</h2>
+            <h2>Máy chủ</h2>
           </div>
           <div className="card-body">
             {status && (
               <dl className="kv">
-                <dt>Public key</dt>
+                <dt>Khóa công khai</dt>
                 <dd className="mono">
                   {status.publicKey}{" "}
-                  <button className="btn icon ghost sm" title="Copy" onClick={() => copyText(status.publicKey).then((ok) => toast(ok ? "Copied" : "Could not copy", ok ? "ok" : "bad"))}>
+                  <button className="btn icon ghost sm" title="Sao chép" onClick={() => copyText(status.publicKey).then((ok) => toast(ok ? "Đã sao chép" : "Không thể sao chép", ok ? "ok" : "bad"))}>
                     <Copy />
                   </button>
                 </dd>
-                <dt>Endpoint</dt>
+                <dt>Điểm kết nối</dt>
                 <dd className="mono">
                   {status.settings.endpointHost}:{status.settings.endpointPort}
                 </dd>
-                <dt>Tunnel</dt>
+                <dt>VPN</dt>
                 <dd className="mono">{status.addresses.join(", ")}</dd>
                 <dt>MTU</dt>
                 <dd>{status.settings.mtu}</dd>
-                <dt>Egress</dt>
-                <dd>{status.egress || (status.firewallManaged ? "any" : "not managed")}</dd>
-                <dt>Firewall</dt>
-                <dd>{status.firewallManaged ? (status.firewallError ? <span className="badge bad">failed</span> : <span className="badge ok">nftables</span>) : <span className="badge">host-managed</span>}</dd>
-                <dt>Up since</dt>
+                <dt>Giao diện ra ngoài</dt>
+                <dd>{status.egress || (status.firewallManaged ? "bất kỳ" : "không được quản lý")}</dd>
+                <dt>Tường lửa</dt>
+                <dd>{status.firewallManaged ? (status.firewallError ? <span className="badge bad">thất bại</span> : <span className="badge ok">nftables</span>) : <span className="badge">do máy chủ quản lý</span>}</dd>
+                <dt>Thời gian hoạt động</dt>
                 <dd>{duration(status.startedAt, now) || "—"}</dd>
-                <dt>Version</dt>
+                <dt>Phiên bản</dt>
                 <dd>{status.version}</dd>
               </dl>
             )}
             {status && status.sysctls.length > 0 && (
               <div className="mt small">
                 <button className="btn sm ghost" onClick={() => setShowSysctls((v) => !v)} style={{ marginLeft: -8 }}>
-                  {showSysctls ? "Hide" : "Show"} kernel tuning ({status.sysctls.length - unapplied.length}/{status.sysctls.length} applied)
+                  {showSysctls ? "Ẩn" : "Hiện"} tối ưu nhân hệ thống ({status.sysctls.length - unapplied.length}/{status.sysctls.length} đã áp dụng)
                 </button>
                 {showSysctls && (
                   <div className="table-wrap mt">
@@ -134,23 +135,23 @@ export function Dashboard() {
                       <thead>
                         <tr>
                           <th>sysctl</th>
-                          <th>wanted</th>
-                          <th>current</th>
+                          <th>Mong muốn</th>
+                          <th>Hiện tại</th>
                         </tr>
                       </thead>
                       <tbody>
                         {status.sysctls.map((s) => (
-                          <tr key={s.key} title={s.error ? `${s.why}. ${s.error}` : s.why}>
+                          <tr key={s.key} title={s.error ? `${technicalMessage(s.why)}. ${technicalMessage(s.error)}` : technicalMessage(s.why)}>
                             <td className="mono">{s.key}</td>
                             <td className="mono">{s.wanted}</td>
                             <td className="mono">
-                              {s.current || "?"} {s.applied ? <span className="badge ok">ok</span> : <span className={`badge ${s.required ? "bad" : "warn"}`}>not set</span>}
+                              {s.current || "?"} {s.applied ? <span className="badge ok">đã áp dụng</span> : <span className={`badge ${s.required ? "bad" : "warn"}`}>chưa áp dụng</span>}
                             </td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
-                    {unapplied.length > 0 && <p className="faint mt">Values marked "not set" are global sysctls the container may not change. Apply them on the host; see docs/performance.md.</p>}
+                    {unapplied.length > 0 && <p className="faint mt">Giá trị “chưa áp dụng” là tham số sysctl toàn hệ thống mà container không thể thay đổi. Hãy áp dụng trên máy chủ; xem docs/performance.md.</p>}
                   </div>
                 )}
               </div>
@@ -161,25 +162,25 @@ export function Dashboard() {
 
       <div className="card mt">
         <div className="card-head">
-          <h2>Connected now</h2>
+          <h2>Đang kết nối</h2>
           <Link href="/peers" className="small">
-            All peers →
+            Tất cả thiết bị →
           </Link>
         </div>
         {connected.length === 0 ? (
-          <div className="empty">No peer has handshaken in the last {status?.settings.connectedWindow ?? 180} seconds.</div>
+          <div className="empty">Không có thiết bị bắt tay trong {status?.settings.connectedWindow ?? 180} giây gần nhất.</div>
         ) : (
           <div className="table-wrap">
             <table>
               <thead>
                 <tr>
-                  <th>Peer</th>
-                  <th>Address</th>
-                  <th className="hide-md">Endpoint</th>
-                  <th className="hide-sm">Session</th>
-                  <th>Handshake</th>
-                  <th className="right">Rate</th>
-                  <th className="right">Transfer</th>
+                  <th>Thiết bị</th>
+                  <th>Địa chỉ</th>
+                  <th className="hide-md">Điểm kết nối</th>
+                  <th className="hide-sm">Phiên kết nối</th>
+                  <th>Bắt tay</th>
+                  <th className="right">Tốc độ</th>
+                  <th className="right">Dữ liệu truyền</th>
                 </tr>
               </thead>
               <tbody>

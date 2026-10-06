@@ -4,6 +4,7 @@ import { api, type User } from "../api";
 import { ago, dateTime } from "../format";
 import { errorMessage, useAuth, useNow, useToast } from "../state";
 import { Confirm, Field, Modal } from "../components/ui";
+import { roleLabel } from "../locale";
 
 export function UsersPage() {
   const { me } = useAuth();
@@ -26,12 +27,12 @@ export function UsersPage() {
     <>
       <div className="page-head">
         <div>
-          <h1>Users</h1>
-          <p>Administrators manage everything; viewers can look but not touch.</p>
+          <h1>Người dùng</h1>
+          <p>Quản trị viên có toàn quyền quản lý; người xem chỉ có thể xem thông tin.</p>
         </div>
         {isAdmin && (
           <button className="btn primary" onClick={() => setCreating(true)}>
-            <Plus /> New user
+            <Plus /> Thêm người dùng
           </button>
         )}
       </div>
@@ -40,11 +41,11 @@ export function UsersPage() {
           <table>
             <thead>
               <tr>
-                <th>Username</th>
-                <th>Role</th>
-                <th>Two-factor</th>
-                <th>Last sign-in</th>
-                <th>Created</th>
+                <th>Tên đăng nhập</th>
+                <th>Vai trò</th>
+                <th>Xác thực hai bước</th>
+                <th>Đăng nhập gần nhất</th>
+                <th>Ngày tạo</th>
                 {isAdmin && <th></th>}
               </tr>
             </thead>
@@ -52,22 +53,22 @@ export function UsersPage() {
               {users.map((u) => (
                 <tr key={u.id}>
                   <td>
-                    {u.username} {u.id === me?.id && <span className="badge accent">you</span>}
+                    {u.username} {u.id === me?.id && <span className="badge accent">bạn</span>}
                   </td>
                   <td>
-                    <span className={`badge ${u.role === "admin" ? "accent" : ""}`}>{u.role}</span>
+                    <span className={`badge ${u.role === "admin" ? "accent" : ""}`}>{roleLabel(u.role)}</span>
                   </td>
-                  <td>{u.totpEnabled ? <span className="badge ok">on</span> : <span className="badge">off</span>}</td>
+                  <td>{u.totpEnabled ? <span className="badge ok">bật</span> : <span className="badge">tắt</span>}</td>
                   <td>{ago(u.lastLoginAt, now)}</td>
                   <td>{dateTime(u.createdAt)}</td>
                   {isAdmin && (
                     <td className="actions">
                       <button className="btn sm" onClick={() => setEditing(u)}>
-                        Edit
+                        Chỉnh sửa
                       </button>{" "}
                       {u.id !== me?.id && (
                         <button className="btn sm danger" onClick={() => setDeleting(u)}>
-                          Delete
+                          Xóa
                         </button>
                       )}
                     </td>
@@ -83,7 +84,7 @@ export function UsersPage() {
           onClose={() => setCreating(false)}
           onSaved={() => {
             setCreating(false);
-            toast("User created");
+            toast("Đã tạo người dùng");
             void load();
           }}
         />
@@ -94,23 +95,23 @@ export function UsersPage() {
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null);
-            toast("User updated");
+            toast("Đã cập nhật người dùng");
             void load();
           }}
         />
       )}
       {deleting && (
         <Confirm
-          title="Delete user"
+          title="Xóa người dùng"
           danger
-          confirmLabel="Delete"
+          confirmLabel="Xóa"
           busy={busy}
           onClose={() => setDeleting(null)}
           onConfirm={async () => {
             setBusy(true);
             try {
               await api.deleteUser(deleting.id);
-              toast("User deleted");
+              toast("Đã xóa người dùng");
               setDeleting(null);
               void load();
             } catch (e) {
@@ -121,7 +122,7 @@ export function UsersPage() {
           }}
           text={
             <>
-              Delete <b>{deleting.username}</b>? Their sessions end immediately.
+              Xóa <b>{deleting.username}</b>? Các phiên đăng nhập của người dùng sẽ kết thúc ngay.
             </>
           }
         />
@@ -151,31 +152,31 @@ function UserForm({ onClose, onSaved }: { onClose: () => void; onSaved: () => vo
   }
   return (
     <Modal
-      title="New user"
+      title="Thêm người dùng"
       onClose={onClose}
       footer={
         <>
           <button className="btn" onClick={onClose} disabled={busy}>
-            Cancel
+            Hủy
           </button>
           <button className="btn primary" type="submit" form="user-form" disabled={busy}>
-            Create
+            Tạo
           </button>
         </>
       }
     >
       <form id="user-form" onSubmit={submit}>
         {error && <div className="error">{error}</div>}
-        <Field label="Username">
+        <Field label="Tên đăng nhập">
           <input className="input" autoFocus value={username} onChange={(e) => setUsername(e.target.value)} required autoComplete="off" />
         </Field>
-        <Field label="Password" hint="At least 12 characters. Tell them to change it after signing in.">
+        <Field label="Mật khẩu" hint="Tối thiểu 12 ký tự. Hãy yêu cầu người dùng đổi mật khẩu sau khi đăng nhập.">
           <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={12} autoComplete="new-password" />
         </Field>
-        <Field label="Role">
+        <Field label="Vai trò">
           <select className="input" value={role} onChange={(e) => setRole(e.target.value)}>
-            <option value="admin">Administrator</option>
-            <option value="viewer">Viewer (read-only)</option>
+            <option value="admin">Quản trị viên</option>
+            <option value="viewer">Người xem (chỉ đọc)</option>
           </select>
         </Field>
       </form>
@@ -205,36 +206,36 @@ function UserEdit({ user, onClose, onSaved }: { user: User; onClose: () => void;
   }
   return (
     <Modal
-      title={`Edit ${user.username}`}
+      title={`Chỉnh sửa ${user.username}`}
       onClose={onClose}
       footer={
         <>
           <button className="btn" onClick={onClose} disabled={busy}>
-            Cancel
+            Hủy
           </button>
           <button className="btn primary" type="submit" form="user-edit" disabled={busy}>
-            Save
+            Lưu
           </button>
         </>
       }
     >
       <form id="user-edit" onSubmit={submit}>
         {error && <div className="error">{error}</div>}
-        <Field label="Role" hint={user.id === me?.id ? "You cannot change your own role." : undefined}>
+        <Field label="Vai trò" hint={user.id === me?.id ? "Bạn không thể đổi vai trò của chính mình." : undefined}>
           <select className="input" value={role} onChange={(e) => setRole(e.target.value as User["role"])} disabled={user.id === me?.id}>
-            <option value="admin">Administrator</option>
-            <option value="viewer">Viewer (read-only)</option>
+            <option value="admin">Quản trị viên</option>
+            <option value="viewer">Người xem (chỉ đọc)</option>
           </select>
         </Field>
-        <Field label="New password" hint="Leave blank to keep it. Setting one signs them out everywhere.">
+        <Field label="Mật khẩu mới" hint="Để trống để giữ mật khẩu hiện tại. Đặt mật khẩu mới sẽ đăng xuất tất cả phiên của người dùng.">
           <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={12} autoComplete="new-password" />
         </Field>
         {user.totpEnabled && (
           <div className="check">
             <input id="reset-totp" type="checkbox" checked={resetTotp} onChange={(e) => setResetTotp(e.target.checked)} />
             <label htmlFor="reset-totp">
-              Reset two-factor authentication
-              <span className="hint">For a lost authenticator. They can set it up again from their account page.</span>
+              Đặt lại xác thực hai bước
+              <span className="hint">Dùng khi mất ứng dụng xác thực. Người dùng có thể thiết lập lại trong trang tài khoản.</span>
             </label>
           </div>
         )}

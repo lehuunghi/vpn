@@ -43,7 +43,7 @@ export function PeerDetail({ peer, live, settings, isAdmin, onClose, onChanged, 
   }
 
   const state = !peer.enabled ? "disabled" : peer.expired ? "expired" : live.connected ? "on" : "off";
-  const stateLabel = { disabled: "Disabled", expired: "Expired", on: "Connected", off: "Not connected" }[state];
+  const stateLabel = { disabled: "Đã vô hiệu hóa", expired: "Đã hết hạn", on: "Đang kết nối", off: "Chưa kết nối" }[state];
 
   return (
     <>
@@ -55,27 +55,27 @@ export function PeerDetail({ peer, live, settings, isAdmin, onClose, onChanged, 
           isAdmin ? (
             <div className="btn-row" style={{ justifyContent: "flex-end", width: "100%" }}>
               <button className="btn sm" onClick={() => setEditing(true)} disabled={busy}>
-                <Pencil /> Edit
+                <Pencil /> Chỉnh sửa
               </button>
               {peer.enabled ? (
-                <button className="btn sm" onClick={() => setConfirm("disable")} disabled={busy} title="Remove from the interface; drops the session">
-                  <Power /> Disconnect
+                <button className="btn sm" onClick={() => setConfirm("disable")} disabled={busy} title="Gỡ khỏi giao diện mạng và ngắt phiên kết nối">
+                  <Power /> Ngắt kết nối
                 </button>
               ) : (
-                <button className="btn sm" onClick={() => act(() => api.enablePeer(peer.id), "Peer enabled")} disabled={busy}>
-                  <Power /> Enable
+                <button className="btn sm" onClick={() => act(() => api.enablePeer(peer.id), "Đã bật thiết bị")} disabled={busy}>
+                  <Power /> Bật
                 </button>
               )}
-              <button className="btn sm" onClick={() => act(() => api.resetPeer(peer.id), "Session reset")} disabled={busy || !peer.enabled} title="Drop the current session; a client that is sending traffic handshakes again within about 15 seconds">
-                <RefreshCw /> Reset session
+              <button className="btn sm" onClick={() => act(() => api.resetPeer(peer.id), "Đã đặt lại phiên kết nối")} disabled={busy || !peer.enabled} title="Ngắt phiên hiện tại; thiết bị đang truyền dữ liệu sẽ thiết lập lại kết nối sau khoảng 15 giây">
+                <RefreshCw /> Đặt lại phiên
               </button>
               {peer.serverKeys && (
-                <button className="btn sm" onClick={() => setConfirm("rotate")} disabled={busy} title="New key pair; the old config stops working">
-                  <KeyRound /> Rotate keys
+                <button className="btn sm" onClick={() => setConfirm("rotate")} disabled={busy} title="Tạo cặp khóa mới; cấu hình cũ sẽ ngừng hoạt động">
+                  <KeyRound /> Thay cặp khóa
                 </button>
               )}
               <button className="btn sm danger" onClick={() => setConfirm("delete")} disabled={busy}>
-                <Trash2 /> Delete
+                <Trash2 /> Xóa
               </button>
             </div>
           ) : undefined
@@ -83,73 +83,73 @@ export function PeerDetail({ peer, live, settings, isAdmin, onClose, onChanged, 
       >
         <div className="tabs">
           <button className={tab === "overview" ? "active" : ""} onClick={() => setTab("overview")}>
-            Overview
+            Tổng quan
           </button>
           <button className={tab === "config" ? "active" : ""} onClick={() => setTab("config")}>
-            Configuration
+            Cấu hình
           </button>
         </div>
         {tab === "overview" && (
           <>
             <div className="grid grid-2">
               <dl className="kv">
-                <dt>Status</dt>
+                <dt>Trạng thái</dt>
                 <dd>
                   <span className={`dot ${state}`} />
                   {stateLabel}
-                  {live.connected && live.connectedSince && <span className="faint"> for {duration(live.connectedSince, now)}</span>}
+                  {live.connected && live.connectedSince && <span className="faint"> trong {duration(live.connectedSince, now)}</span>}
                 </dd>
-                <dt>Tunnel address</dt>
+                <dt>Địa chỉ VPN</dt>
                 <dd className="mono">
                   {peer.ipv4}
                   {peer.ipv6 ? `, ${peer.ipv6}` : ""}
                 </dd>
-                <dt>Endpoint</dt>
+                <dt>Điểm kết nối</dt>
                 <dd className="mono">{live.endpoint || "—"}</dd>
-                <dt>Last handshake</dt>
+                <dt>Bắt tay gần nhất</dt>
                 <dd>
                   {ago(live.lastHandshake, now)} <span className="faint">{dateTime(live.lastHandshake)}</span>
                 </dd>
-                <dt>Rate</dt>
+                <dt>Tốc độ</dt>
                 <dd className="num">
                   ↓ {rate(live.rxRate)} · ↑ {rate(live.txRate)}
                 </dd>
-                <dt>Transfer</dt>
+                <dt>Dữ liệu truyền</dt>
                 <dd className="num">
                   ↓ {bytes(live.rx)} · ↑ {bytes(live.tx)}
                 </dd>
               </dl>
               <dl className="kv">
-                <dt>Public key</dt>
+                <dt>Khóa công khai</dt>
                 <dd className="mono" title={peer.publicKey}>
                   {shortKey(peer.publicKey)}{" "}
-                  <button className="btn icon ghost sm" title="Copy" onClick={() => copyText(peer.publicKey).then((ok) => toast(ok ? "Copied" : "Could not copy", ok ? "ok" : "bad"))}>
+                  <button className="btn icon ghost sm" title="Sao chép" onClick={() => copyText(peer.publicKey).then((ok) => toast(ok ? "Đã sao chép" : "Không thể sao chép", ok ? "ok" : "bad"))}>
                     <Copy />
                   </button>
                 </dd>
-                <dt>Keys</dt>
+                <dt>Khóa</dt>
                 <dd>
-                  {peer.serverKeys ? "generated by the server" : "held by the client"}
-                  {peer.presharedKey ? " · preshared key" : ""}
+                  {peer.serverKeys ? "do máy chủ tạo" : "do thiết bị giữ"}
+                  {peer.presharedKey ? " · khóa chia sẻ trước" : ""}
                 </dd>
-                <dt>Client routes</dt>
+                <dt>Định tuyến thiết bị</dt>
                 <dd className="mono">{peer.clientRoutes}</dd>
                 <dt>DNS</dt>
-                <dd>{peer.dns || <span className="faint">server default ({settings.dns || "none"})</span>}</dd>
-                <dt>Keepalive / MTU</dt>
+                <dd>{peer.dns || <span className="faint">mặc định máy chủ ({settings.dns || "không có"})</span>}</dd>
+                <dt>Duy trì kết nối / MTU</dt>
                 <dd>
-                  {peer.keepalive || settings.keepalive}s / {peer.mtu || settings.mtu}
+                  {peer.keepalive || settings.keepalive} giây / {peer.mtu || settings.mtu}
                 </dd>
-                <dt>Expires</dt>
-                <dd>{peer.expiresAt ? dateTime(peer.expiresAt) : <span className="faint">never</span>}</dd>
-                <dt>Created</dt>
+                <dt>Hết hạn</dt>
+                <dd>{peer.expiresAt ? dateTime(peer.expiresAt) : <span className="faint">không hết hạn</span>}</dd>
+                <dt>Ngày tạo</dt>
                 <dd>{dateTime(peer.createdAt)}</dd>
               </dl>
             </div>
             {peer.notes && <p className="mt muted" style={{ whiteSpace: "pre-wrap" }}>{peer.notes}</p>}
             <div className="mt" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <Legend />
-              <Segmented value={range} onChange={setRange} options={[{ value: "1h", label: "1h" }, { value: "24h", label: "24h" }, { value: "7d", label: "7d" }, { value: "30d", label: "30d" }]} />
+              <Segmented value={range} onChange={setRange} options={[{ value: "1h", label: "1 giờ" }, { value: "24h", label: "24 giờ" }, { value: "7d", label: "7 ngày" }, { value: "30d", label: "30 ngày" }]} />
             </div>
             <TrafficChart points={series} from={now - rangeMs[range]} to={now} bucketSeconds={range === "30d" ? 3600 : 300} />
           </>
@@ -157,19 +157,19 @@ export function PeerDetail({ peer, live, settings, isAdmin, onClose, onChanged, 
         {tab === "config" && (
           <div className="qr">
             {peer.serverKeys ? (
-              <img key={qrKey} src={`/api/peers/${peer.id}/qr.png?size=384&v=${peer.updatedAt}`} alt="QR code of the client configuration" width={320} height={320} onError={() => setQrKey((k) => k + 1)} />
+              <img key={qrKey} src={`/api/peers/${peer.id}/qr.png?size=384&v=${peer.updatedAt}`} alt="Mã QR cấu hình thiết bị" width={320} height={320} onError={() => setQrKey((k) => k + 1)} />
             ) : (
-              <div className="notice">This peer holds its own private key, so there is no QR code. Fill in the PrivateKey line on the client.</div>
+              <div className="notice">Thiết bị này tự giữ khóa riêng nên không có mã QR. Hãy điền dòng PrivateKey trên thiết bị.</div>
             )}
             <pre className="config">{config || "…"}</pre>
             <div className="btn-row">
-              <button className="btn" onClick={() => copyText(config).then((ok) => toast(ok ? "Configuration copied" : "Could not copy", ok ? "ok" : "bad"))} disabled={!config}>
-                <Copy /> Copy
+              <button className="btn" onClick={() => copyText(config).then((ok) => toast(ok ? "Đã sao chép cấu hình" : "Không thể sao chép", ok ? "ok" : "bad"))} disabled={!config}>
+                <Copy /> Sao chép
               </button>
               <a className="btn" href={`/api/peers/${peer.id}/config?download=1`}>
-                <Download /> Download .conf
+                <Download /> Tải tệp .conf
               </a>
-              <span className="small faint">Anyone with this file can connect as this peer. Viewing it is recorded in the audit log.</span>
+              <span className="small faint">Bất kỳ ai có tệp này đều có thể kết nối với danh tính của thiết bị. Việc xem cấu hình được ghi trong nhật ký.</span>
             </div>
           </div>
         )}
@@ -182,17 +182,17 @@ export function PeerDetail({ peer, live, settings, isAdmin, onClose, onChanged, 
           onSaved={(p) => {
             setEditing(false);
             setConfig("");
-            toast("Peer saved");
+            toast("Đã lưu thiết bị");
             onChanged(p);
           }}
         />
       )}
-      {confirm === "delete" && <Confirm title="Delete peer" danger confirmLabel="Delete" busy={busy} onClose={() => setConfirm(null)} onConfirm={() => act(() => api.deletePeer(peer.id).then(() => onClose()), "Peer deleted")} text={<>Delete <b>{peer.name}</b>? Its keys, address and traffic history are gone for good.</>} />}
-      {confirm === "disable" && <Confirm title="Disconnect peer" confirmLabel="Disconnect" busy={busy} onClose={() => setConfirm(null)} onConfirm={() => act(() => api.disablePeer(peer.id), "Peer disconnected")} text={<>Remove <b>{peer.name}</b> from the interface? Its session drops now and it cannot reconnect until you enable it again.</>} />}
+      {confirm === "delete" && <Confirm title="Xóa thiết bị" danger confirmLabel="Xóa" busy={busy} onClose={() => setConfirm(null)} onConfirm={() => act(() => api.deletePeer(peer.id).then(() => onClose()), "Đã xóa thiết bị")} text={<>Xóa <b>{peer.name}</b>? Khóa, địa chỉ và lịch sử lưu lượng sẽ bị xóa vĩnh viễn.</>} />}
+      {confirm === "disable" && <Confirm title="Ngắt kết nối thiết bị" confirmLabel="Ngắt kết nối" busy={busy} onClose={() => setConfirm(null)} onConfirm={() => act(() => api.disablePeer(peer.id), "Đã ngắt kết nối thiết bị")} text={<>Gỡ <b>{peer.name}</b> khỏi giao diện mạng? Phiên kết nối sẽ bị ngắt ngay và thiết bị chỉ có thể kết nối lại khi được bật.</>} />}
       {confirm === "rotate" && (
         <Confirm
-          title="Rotate keys"
-          confirmLabel="Rotate"
+          title="Thay cặp khóa"
+          confirmLabel="Thay khóa"
           busy={busy}
           onClose={() => setConfirm(null)}
           onConfirm={() =>
@@ -202,10 +202,10 @@ export function PeerDetail({ peer, live, settings, isAdmin, onClose, onChanged, 
                   setConfig(p.config);
                   setTab("config");
                 }),
-              "Keys rotated; hand out the new configuration",
+              "Đã thay khóa; hãy cấp cấu hình mới cho thiết bị",
             )
           }
-          text={<>Give <b>{peer.name}</b> a new key pair? The configuration it has now stops working the moment you confirm.</>}
+          text={<>Tạo cặp khóa mới cho <b>{peer.name}</b>? Cấu hình hiện tại sẽ ngừng hoạt động ngay khi bạn xác nhận.</>}
         />
       )}
     </>

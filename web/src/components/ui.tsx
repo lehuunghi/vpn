@@ -19,7 +19,7 @@ export function Modal({ title, onClose, children, wide, footer }: { title: strin
       <div className={`card modal${wide ? " wide" : ""}`} role="dialog" aria-modal="true" aria-label={title}>
         <div className="card-head">
           <h2>{title}</h2>
-          <button className="btn icon ghost" onClick={onClose} aria-label="Close">
+          <button className="btn icon ghost" onClick={onClose} aria-label="Đóng">
             <X />
           </button>
         </div>
@@ -57,7 +57,7 @@ export function Check({ label, hint, checked, onChange, disabled }: { label: str
   );
 }
 
-export function Confirm({ title, text, confirmLabel = "Confirm", danger, onConfirm, onClose, busy }: { title: string; text: ReactNode; confirmLabel?: string; danger?: boolean; onConfirm: () => void; onClose: () => void; busy?: boolean }) {
+export function Confirm({ title, text, confirmLabel = "Xác nhận", danger, onConfirm, onClose, busy }: { title: string; text: ReactNode; confirmLabel?: string; danger?: boolean; onConfirm: () => void; onClose: () => void; busy?: boolean }) {
   return (
     <Modal
       title={title}
@@ -65,7 +65,7 @@ export function Confirm({ title, text, confirmLabel = "Confirm", danger, onConfi
       footer={
         <>
           <button className="btn" onClick={onClose} disabled={busy}>
-            Cancel
+            Hủy
           </button>
           <button className={`btn ${danger ? "danger" : "primary"}`} onClick={onConfirm} disabled={busy}>
             {confirmLabel}

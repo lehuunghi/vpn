@@ -18,7 +18,7 @@ export function Setup() {
     e.preventDefault();
     setError("");
     if (password !== confirm) {
-      setError("The passwords do not match.");
+      setError("Mật khẩu và mật khẩu xác nhận không khớp.");
       return;
     }
     setBusy(true);
@@ -42,25 +42,25 @@ export function Setup() {
             </div>
             <div className="brand-name">VPN20</div>
           </div>
-          <h1>Welcome</h1>
+          <h1>Chào mừng</h1>
           <p className="muted" style={{ textAlign: "center", marginBottom: 16 }}>
-            Create the first administrator. This form only works once.
+            Tạo tài khoản quản trị đầu tiên. Biểu mẫu này chỉ dùng một lần.
           </p>
           {error && <div className="error">{error}</div>}
-          <Field label="Username">
+          <Field label="Tên đăng nhập">
             <input className="input" autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} required />
           </Field>
-          <Field label="Password" hint="At least 12 characters. Length beats complexity.">
+          <Field label="Mật khẩu" hint="Tối thiểu 12 ký tự. Ưu tiên mật khẩu dài.">
             <input className="input" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={12} />
           </Field>
-          <Field label="Confirm password">
+          <Field label="Xác nhận mật khẩu">
             <input className="input" type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required />
           </Field>
-          <Field label="Public endpoint" hint="The hostname or IP address clients will connect to. You can change it later in Settings.">
+          <Field label="Địa chỉ kết nối công khai" hint="Tên miền hoặc IP mà thiết bị sẽ kết nối đến. Có thể thay đổi sau trong Cài đặt.">
             <input className="input" value={endpointHost} onChange={(e) => setEndpointHost(e.target.value)} placeholder="vpn.example.com" required />
           </Field>
           <button className="btn primary" type="submit" disabled={busy} style={{ width: "100%", justifyContent: "center" }}>
-            {busy ? "…" : "Create administrator"}
+            {busy ? "…" : "Tạo tài khoản quản trị"}
           </button>
           <Legal center />
         </div>

@@ -3,9 +3,9 @@ import { Monitor, Moon, Sun } from "lucide-react";
 import { getThemeChoice, setThemeChoice, subscribeTheme, type ThemeChoice } from "../theme";
 
 const options: { value: ThemeChoice; label: string; icon: typeof Moon }[] = [
-  { value: "dark", label: "Dark", icon: Moon },
-  { value: "light", label: "Light", icon: Sun },
-  { value: "system", label: "System", icon: Monitor },
+  { value: "dark", label: "Tối", icon: Moon },
+  { value: "light", label: "Sáng", icon: Sun },
+  { value: "system", label: "Hệ thống", icon: Monitor },
 ];
 
 function useThemeChoice(): [ThemeChoice, (v: ThemeChoice) => void] {
@@ -19,7 +19,7 @@ function useThemeChoice(): [ThemeChoice, (v: ThemeChoice) => void] {
 export function ThemeSwitch({ compact = false, icons = true }: { compact?: boolean; icons?: boolean }) {
   const [choice, pick] = useThemeChoice();
   return (
-    <div className="segmented" role="radiogroup" aria-label="Theme">
+    <div className="segmented" role="radiogroup" aria-label="Giao diện">
       {options.map((o) => {
         const Icon = o.icon;
         return (
@@ -43,7 +43,7 @@ export function ThemeToggle() {
   const next = options[(idx + 1) % options.length];
   const Icon = current.icon;
   return (
-    <button type="button" className="icon-btn" title={`Theme: ${current.label}. Switch to ${next.label.toLowerCase()}`} aria-label={`Theme: ${current.label}. Switch to ${next.label.toLowerCase()}`} onClick={() => pick(next.value)}>
+    <button type="button" className="icon-btn" title={`Giao diện: ${current.label}. Chuyển sang ${next.label.toLowerCase()}`} aria-label={`Giao diện: ${current.label}. Chuyển sang ${next.label.toLowerCase()}`} onClick={() => pick(next.value)}>
       <Icon size={17} />
     </button>
   );

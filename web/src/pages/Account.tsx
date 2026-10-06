@@ -4,6 +4,7 @@ import { ago, dateTime } from "../format";
 import { errorMessage, useAuth, useNow, useToast } from "../state";
 import { Field, Modal, copyText } from "../components/ui";
 import { ThemeSwitch } from "../components/ThemeSwitch";
+import { roleLabel } from "../locale";
 
 export function Account() {
   const { me, refresh } = useAuth();
@@ -31,7 +32,7 @@ export function Account() {
     e.preventDefault();
     setPwError("");
     if (next !== confirm) {
-      setPwError("The new passwords do not match.");
+      setPwError("Mật khẩu mới và mật khẩu xác nhận không khớp.");
       return;
     }
     setBusy(true);
@@ -40,7 +41,7 @@ export function Account() {
       setCurrent("");
       setNext("");
       setConfirm("");
-      toast("Password changed; other sessions were signed out");
+      toast("Đã đổi mật khẩu và đăng xuất các phiên khác");
       void loadSessions();
     } catch (err) {
       setPwError(errorMessage(err));
@@ -78,7 +79,7 @@ export function Account() {
       await api.totpDisable(disablePw);
       setDisabling(false);
       setDisablePw("");
-      toast("Two-factor authentication turned off");
+      toast("Đã tắt xác thực hai bước");
       await refresh();
     } catch (err) {
       toast(errorMessage(err), "bad");
@@ -89,60 +90,60 @@ export function Account() {
     <>
       <div className="page-head">
         <div>
-          <h1>Account</h1>
+          <h1>Tài khoản</h1>
           <p>
-            Signed in as <b>{me?.username}</b> ({me?.role}).
+            Đang đăng nhập bằng <b>{me?.username}</b> ({roleLabel(me?.role)}).
           </p>
         </div>
       </div>
       <div className="grid grid-2">
         <form className="card" onSubmit={changePassword}>
           <div className="card-head">
-            <h2>Password</h2>
+            <h2>Mật khẩu</h2>
           </div>
           <div className="card-body">
             {pwError && <div className="error">{pwError}</div>}
-            <Field label="Current password">
+            <Field label="Mật khẩu hiện tại">
               <input className="input" type="password" value={current} onChange={(e) => setCurrent(e.target.value)} required autoComplete="current-password" />
             </Field>
-            <Field label="New password" hint="At least 12 characters.">
+            <Field label="Mật khẩu mới" hint="Tối thiểu 12 ký tự.">
               <input className="input" type="password" value={next} onChange={(e) => setNext(e.target.value)} required minLength={12} autoComplete="new-password" />
             </Field>
-            <Field label="Confirm new password">
+            <Field label="Xác nhận mật khẩu mới">
               <input className="input" type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required autoComplete="new-password" />
             </Field>
             <button className="btn primary" type="submit" disabled={busy}>
-              Change password
+              Đổi mật khẩu
             </button>
           </div>
         </form>
         <div className="card">
           <div className="card-head">
-            <h2>Two-factor authentication</h2>
-            {me?.totpEnabled ? <span className="badge ok">on</span> : <span className="badge">off</span>}
+            <h2>Xác thực hai bước</h2>
+            {me?.totpEnabled ? <span className="badge ok">bật</span> : <span className="badge">tắt</span>}
           </div>
           <div className="card-body">
             {me?.totpEnabled ? (
               <>
-                <p>A code from your authenticator app is required at every sign-in.</p>
+                <p>Mỗi lần đăng nhập đều cần mã từ ứng dụng xác thực.</p>
                 <p className="muted small">
-                  {me.recoveryCodesLeft} recovery code{me.recoveryCodesLeft === 1 ? "" : "s"} left.
+                  Còn {me.recoveryCodesLeft} mã khôi phục.
                 </p>
                 {!disabling ? (
                   <button className="btn" onClick={() => setDisabling(true)}>
-                    Turn off
+                    Tắt
                   </button>
                 ) : (
                   <form onSubmit={disableTotp}>
-                    <Field label="Confirm with your password">
+                    <Field label="Xác nhận bằng mật khẩu">
                       <input className="input" type="password" value={disablePw} onChange={(e) => setDisablePw(e.target.value)} required autoComplete="current-password" autoFocus />
                     </Field>
                     <div className="btn-row">
                       <button className="btn danger" type="submit">
-                        Turn off two-factor
+                        Tắt xác thực hai bước
                       </button>
                       <button className="btn" type="button" onClick={() => setDisabling(false)}>
-                        Cancel
+                        Hủy
                       </button>
                     </div>
                   </form>
@@ -150,9 +151,9 @@ export function Account() {
               </>
             ) : (
               <>
-                <p>Add a time-based one-time code from an authenticator app (Aegis, Google Authenticator, 1Password, and so on).</p>
+                <p>Thêm mã dùng một lần theo thời gian từ ứng dụng xác thực như Aegis, Google Authenticator hoặc 1Password.</p>
                 <button className="btn primary" onClick={startTotp}>
-                  Set up
+                  Thiết lập
                 </button>
               </>
             )}
@@ -161,18 +162,18 @@ export function Account() {
       </div>
       <div className="card mt">
         <div className="card-head">
-          <h2>Appearance</h2>
+          <h2>Giao diện</h2>
         </div>
         <div className="card-body">
           <p className="muted small" style={{ marginBottom: 10 }}>
-            Dark is the default. The choice is remembered in this browser only.
+            Giao diện tối là mặc định. Lựa chọn chỉ được lưu trong trình duyệt này.
           </p>
           <ThemeSwitch />
         </div>
       </div>
       <div className="card mt">
         <div className="card-head">
-          <h2>Sessions</h2>
+          <h2>Phiên đăng nhập</h2>
           {sessions.length > 1 && (
             <button
               className="btn sm"
@@ -180,13 +181,13 @@ export function Account() {
                 api
                   .revokeSessions()
                   .then(() => {
-                    toast("Other sessions signed out");
+                    toast("Đã đăng xuất các phiên khác");
                     void loadSessions();
                   })
                   .catch((e) => toast(errorMessage(e), "bad"))
               }
             >
-              Sign out everywhere else
+              Đăng xuất các phiên khác
             </button>
           )}
         </div>
@@ -195,16 +196,16 @@ export function Account() {
             <thead>
               <tr>
                 <th></th>
-                <th>Signed in</th>
-                <th>Last seen</th>
-                <th>From</th>
-                <th>Browser</th>
+                <th>Thời điểm đăng nhập</th>
+                <th>Hoạt động gần nhất</th>
+                <th>Địa chỉ IP</th>
+                <th>Trình duyệt</th>
               </tr>
             </thead>
             <tbody>
               {sessions.map((s, i) => (
                 <tr key={i}>
-                  <td>{s.current && <span className="badge accent">this one</span>}</td>
+                  <td>{s.current && <span className="badge accent">phiên hiện tại</span>}</td>
                   <td className="nowrap">{dateTime(s.createdAt)}</td>
                   <td className="nowrap">{ago(s.lastSeenAt, now)}</td>
                   <td className="mono">{s.ip}</td>
@@ -219,41 +220,41 @@ export function Account() {
       </div>
 
       {totp && (
-        <Modal title="Set up two-factor authentication" onClose={() => setTotp(null)}>
+        <Modal title="Thiết lập xác thực hai bước" onClose={() => setTotp(null)}>
           <form onSubmit={confirmTotp}>
             <div className="qr">
-              <img src="/api/auth/totp/qr.png" alt="QR code for your authenticator app" width={256} height={256} style={{ maxWidth: 256 }} />
+              <img src="/api/auth/totp/qr.png" alt="Mã QR cho ứng dụng xác thực" width={256} height={256} style={{ maxWidth: 256 }} />
               <p className="small muted">
-                Cannot scan? Enter this key by hand: <code>{totp.secret}</code>{" "}
-                <button type="button" className="btn sm ghost" onClick={() => copyText(totp.secret).then((ok) => toast(ok ? "Copied" : "Could not copy", ok ? "ok" : "bad"))}>
-                  copy
+                Không quét được? Nhập khóa này thủ công: <code>{totp.secret}</code>{" "}
+                <button type="button" className="btn sm ghost" onClick={() => copyText(totp.secret).then((ok) => toast(ok ? "Đã sao chép" : "Không thể sao chép", ok ? "ok" : "bad"))}>
+                  sao chép
                 </button>
               </p>
             </div>
             {totpError && <div className="error">{totpError}</div>}
-            <Field label="Enter the six-digit code the app shows">
+            <Field label="Nhập mã gồm 6 chữ số trong ứng dụng">
               <input className="input" inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value)} required autoFocus />
             </Field>
             <button className="btn primary" type="submit">
-              Turn on
+              Bật
             </button>
           </form>
         </Modal>
       )}
       {recovery && (
-        <Modal title="Recovery codes" onClose={() => setRecovery(null)}>
-          <p>Each of these signs you in once if you lose your authenticator. Keep them somewhere safe; they are not shown again.</p>
+        <Modal title="Mã khôi phục" onClose={() => setRecovery(null)}>
+          <p>Mỗi mã giúp bạn đăng nhập một lần khi mất ứng dụng xác thực. Hãy lưu ở nơi an toàn vì các mã sẽ không được hiển thị lại.</p>
           <ul className="recovery">
             {recovery.map((c) => (
               <li key={c}>{c}</li>
             ))}
           </ul>
           <div className="btn-row mt">
-            <button className="btn" onClick={() => copyText(recovery.join("\n")).then((ok) => toast(ok ? "Copied" : "Could not copy", ok ? "ok" : "bad"))}>
-              Copy all
+            <button className="btn" onClick={() => copyText(recovery.join("\n")).then((ok) => toast(ok ? "Đã sao chép" : "Không thể sao chép", ok ? "ok" : "bad"))}>
+              Sao chép tất cả
             </button>
             <button className="btn primary" onClick={() => setRecovery(null)}>
-              I have saved them
+              Tôi đã lưu các mã
             </button>
           </div>
         </Modal>
