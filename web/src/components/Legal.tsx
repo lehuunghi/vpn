@@ -6,7 +6,7 @@ export function Legal({ center = false }: { center?: boolean }) {
   return (
     <p className={`legal${center ? " center" : ""}`}>
       <a href={COMPANY_URL} target="_blank" rel="noopener noreferrer">
-        Công ty TNHH TN20 · 20.com.vn
+        Công ty TNHH TN20
       </a>
       <span className="legal-sep" aria-hidden="true">·</span>
       <a href="https://github.com/lehuunghi/vpn" target="_blank" rel="noopener noreferrer">

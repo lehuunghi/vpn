@@ -106,8 +106,8 @@ export function Account() {
             <Field label="Mật khẩu hiện tại">
               <input className="input" type="password" value={current} onChange={(e) => setCurrent(e.target.value)} required autoComplete="current-password" />
             </Field>
-            <Field label="Mật khẩu mới" hint="Tối thiểu 12 ký tự.">
-              <input className="input" type="password" value={next} onChange={(e) => setNext(e.target.value)} required minLength={12} autoComplete="new-password" />
+            <Field label="Mật khẩu mới" hint="Tối thiểu 6 ký tự.">
+              <input className="input" type="password" value={next} onChange={(e) => setNext(e.target.value)} required minLength={6} autoComplete="new-password" />
             </Field>
             <Field label="Xác nhận mật khẩu mới">
               <input className="input" type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required autoComplete="new-password" />

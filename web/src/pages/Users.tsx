@@ -170,8 +170,8 @@ function UserForm({ onClose, onSaved }: { onClose: () => void; onSaved: () => vo
         <Field label="Tên đăng nhập">
           <input className="input" autoFocus value={username} onChange={(e) => setUsername(e.target.value)} required autoComplete="off" />
         </Field>
-        <Field label="Mật khẩu" hint="Tối thiểu 12 ký tự. Hãy yêu cầu người dùng đổi mật khẩu sau khi đăng nhập.">
-          <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={12} autoComplete="new-password" />
+        <Field label="Mật khẩu" hint="Tối thiểu 6 ký tự. Hãy yêu cầu người dùng đổi mật khẩu sau khi đăng nhập.">
+          <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} autoComplete="new-password" />
         </Field>
         <Field label="Vai trò">
           <select className="input" value={role} onChange={(e) => setRole(e.target.value)}>
@@ -228,7 +228,7 @@ function UserEdit({ user, onClose, onSaved }: { user: User; onClose: () => void;
           </select>
         </Field>
         <Field label="Mật khẩu mới" hint="Để trống để giữ mật khẩu hiện tại. Đặt mật khẩu mới sẽ đăng xuất tất cả phiên của người dùng.">
-          <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={12} autoComplete="new-password" />
+          <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={6} autoComplete="new-password" />
         </Field>
         {user.totpEnabled && (
           <div className="check">

@@ -22,11 +22,26 @@ func TestPasswordRoundTrip(t *testing.T) {
 }
 
 func TestValidatePassword(t *testing.T) {
-	if err := ValidatePassword("short"); err == nil {
-		t.Fatal("short password accepted")
+	tests := []struct {
+		name string
+		password string
+		accepted bool
+	}{
+		{"empty", "", false},
+		{"five characters", "12345", false},
+		{"six digits", "123456", true},
+		{"six lowercase letters", "abcdef", true},
+		{"five Unicode characters", "áéíóú", false},
+		{"six Unicode characters", "áéíóúñ", true},
+		{"long password", "correct horse battery staple", true},
 	}
-	if err := ValidatePassword("twelve chars"); err != nil {
-		t.Fatalf("12-character password rejected: %v", err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidatePassword(tt.password)
+			if (err == nil) != tt.accepted {
+				t.Fatalf("ValidatePassword(%q) = %v, accepted = %v", tt.password, err, tt.accepted)
+			}
+		})
 	}
 }
 

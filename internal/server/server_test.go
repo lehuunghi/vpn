@@ -10,6 +10,7 @@ import (
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/netip"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -262,4 +263,31 @@ func TestSecurityHeadersAndSPA(t *testing.T) {
 	if res.StatusCode != 404 {
 		t.Errorf("unknown api path: %d", res.StatusCode)
 	}
+}
+
+func TestSixCharacterPasswordLifecycle(t *testing.T) {
+	c, _ := newClient(t)
+	c.expect("POST", "/api/setup", map[string]string{"username": "admin", "password": "12345", "endpointHost": "vpn.test"}, 400)
+	c.expect("POST", "/api/setup", map[string]string{"username": "admin", "password": "123456", "endpointHost": "vpn.test"}, 201)
+
+	c.expect("POST", "/api/auth/password", map[string]string{"current": "123456", "new": "abcde"}, 400)
+	c.expect("POST", "/api/auth/password", map[string]string{"current": "123456", "new": "abcdef"}, 200)
+	c.expect("POST", "/api/auth/logout", nil, 200)
+	c.expect("POST", "/api/auth/login", map[string]string{"username": "admin", "password": "123456"}, 401)
+	c.expect("POST", "/api/auth/login", map[string]string{"username": "admin", "password": "abcdef"}, 200)
+
+	c.expect("POST", "/api/users", map[string]string{"username": "eve", "password": "12345", "role": "viewer"}, 400)
+	out := c.expect("POST", "/api/users", map[string]string{"username": "eve", "password": "123456", "role": "viewer"}, 201)
+	var created struct {
+		ID int64
+	}
+	if err := json.Unmarshal(out, &created); err != nil || created.ID == 0 {
+		t.Fatalf("invalid created user: %s, %v", out, err)
+	}
+	userPath := "/api/users/" + strconv.FormatInt(created.ID, 10)
+	c.expect("PUT", userPath, map[string]string{"password": "54321"}, 400)
+	c.expect("PUT", userPath, map[string]string{"password": "654321"}, 200)
+	c.expect("POST", "/api/auth/logout", nil, 200)
+	c.expect("POST", "/api/auth/login", map[string]string{"username": "eve", "password": "123456"}, 401)
+	c.expect("POST", "/api/auth/login", map[string]string{"username": "eve", "password": "654321"}, 200)
 }

@@ -50,8 +50,8 @@ export function Setup() {
           <Field label="Tên đăng nhập">
             <input className="input" autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} required />
           </Field>
-          <Field label="Mật khẩu" hint="Tối thiểu 12 ký tự. Ưu tiên mật khẩu dài.">
-            <input className="input" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={12} />
+          <Field label="Mật khẩu" hint="Tối thiểu 6 ký tự. Ưu tiên mật khẩu dài.">
+            <input className="input" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} />
           </Field>
           <Field label="Xác nhận mật khẩu">
             <input className="input" type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required />

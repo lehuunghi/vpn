@@ -35,7 +35,7 @@ const (
 )
 
 // MinPasswordLength is the shortest password accepted.
-const MinPasswordLength = 12
+const MinPasswordLength = 6
 
 // ValidatePassword enforces the password policy: length only. Composition
 // rules produce worse passwords, not better ones.

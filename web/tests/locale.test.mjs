@@ -20,7 +20,7 @@ test("Lỗi lồng nhau giữ ngữ cảnh và giá trị nhập của người 
     locale.localizeError("IPv4: 10.9.0.2 is outside 10.8.0.0/24"),
     "IPv4: Địa chỉ 10.9.0.2 nằm ngoài mạng 10.8.0.0/24.",
   );
-  assert.equal(locale.localizeError("password must be at least 12 characters"), "Mật khẩu phải có ít nhất 12 ký tự.");
+  assert.equal(locale.localizeError("password must be at least 6 characters"), "Mật khẩu phải có ít nhất 6 ký tự.");
 });
 
 test("Nhiều lỗi xác thực không bị mất và lỗi chưa biết có thông báo tiếng Việt", () => {
