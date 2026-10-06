@@ -1,18 +1,16 @@
 <p align="center">
-  <img src="docs/brand/ihasvpn-mark-256.png" width="128" height="128" alt="ihasvpn: an orange cat peeking over the edge of a teal shield">
+  <img src="docs/brand/vpn20-mark-256.png" width="128" height="128" alt="VPN20 shield logo">
 </p>
 
-# ihasvpn
+# VPN20
 
-> [!NOTE]
-> Development happens on [git.coffeylabs.org/coffey-labs/ihasvpn](https://git.coffeylabs.org/coffey-labs/ihasvpn); the copy on GitHub is a read-only mirror.
-> Report issues at **[git.coffeylabs.org/coffey-labs/ihasvpn/issues](https://git.coffeylabs.org/coffey-labs/ihasvpn/issues)**, and join discussions at **[community.coffeylabs.org](https://community.coffeylabs.org)**.
+**VPN20 — Công ty TNHH TN20**
+
+Source, bug reports and feature requests: **[github.com/lehuunghi/vpn](https://github.com/lehuunghi/vpn)**.
 
 A self-hosted WireGuard server with a secure web console, in one container.
 
-**[ihasvpn.org](https://ihasvpn.org)** shows what it does and what it looks like.
-
-Start it, open the console, create a peer, scan the QR code. ihasvpn runs the
+Start it, open the console, create a peer, scan the QR code. VPN20 runs the
 tunnel on the kernel's WireGuard module, keeps the NAT rules and forwarding
 sysctls in order, and gives you a dashboard that shows who is connected, how
 much they are moving, and a button to cut them off.
@@ -22,7 +20,7 @@ much they are moving, and a button to cut them off.
 - **Peers.** Create, edit, disable, delete. The server generates the key
   pair (and a preshared key) and shows a QR code and a `.conf` download; or
   the client brings its own public key and the private key never leaves the
-  device. Pin a tunnel address or let ihasvpn allocate one. Set an expiry and the
+  device. Pin a tunnel address or let vpn20 allocate one. Set an expiry and the
   peer is disconnected on time. Rotate keys in one click.
 - **Who is connected.** Live status from the interface counters every two
   seconds: endpoint, last handshake, session length, current rate, total
@@ -45,47 +43,22 @@ much they are moving, and a button to cut them off.
 - **Self-contained.** One static Go binary, one SQLite file under `/data`,
   no other services. Multi-arch image for amd64 and arm64.
 
-## Screenshots
-
-The dashboard: who is connected, live throughput, traffic history and the
-server's details.
-
-![Dashboard](docs/screenshots/dashboard.jpg)
-
-Peers, with live rates and totals. Connected peers sort to the top.
-
-![Peers](docs/screenshots/peers.jpg)
-
-A peer: status, endpoint, handshake, keys and usage, with disconnect, session
-reset and key rotation a click away.
-
-![Peer overview](docs/screenshots/peer-overview.jpg)
-
-The same peer's configuration: scan the QR code with the WireGuard app, copy
-the text, or download the `.conf`.
-
-![Peer configuration and QR code](docs/screenshots/peer-config.jpg)
-
-Settings: endpoint, client defaults, peer isolation and MSS clamping. Changes
-apply without a restart.
-
-![Settings](docs/screenshots/settings.jpg)
-
 ## Quick start
 
 ```sh
-curl -O https://git.coffeylabs.org/coffey-labs/ihasvpn/raw/branch/main/docker-compose.yml
-# edit IHASVPN_ENDPOINT (your public hostname or IP), then:
-docker compose up -d
+git clone --branch main https://github.com/lehuunghi/vpn.git
+cd vpn
+# edit VPN20_ENDPOINT (your public hostname or IP), then:
+docker compose up -d --build
 ```
 
 Open <http://localhost:51821>, create the first administrator, and add a
 peer. Point the WireGuard app on your phone at the QR code.
 
 The console is bound to localhost in the compose file on purpose. To reach
-it from elsewhere, either set `IHASVPN_TLS_SELF_SIGNED: "true"` and bind to the
+it from elsewhere, either set `VPN20_TLS_SELF_SIGNED: "true"` and bind to the
 address you need, or put a TLS-terminating reverse proxy in front of it and
-list the proxy in `IHASVPN_TRUSTED_PROXIES`.
+list the proxy in `VPN20_TRUSTED_PROXIES`.
 
 For the fastest configuration, `docker-compose.host.yml` runs on the host
 network; [docs/performance.md](docs/performance.md) says when that is worth
@@ -110,33 +83,33 @@ routes, MTU, keepalive, peer isolation, MSS clamping, preshared keys).
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `IHASVPN_ENDPOINT` | | Public hostname or IP for client configs. Also asked for at first-run setup. |
-| `IHASVPN_PORT` | `51820` | UDP listen port. |
-| `IHASVPN_SUBNET` | `10.8.0.0/24` | IPv4 tunnel network; the server takes the first address. |
-| `IHASVPN_SUBNET6` | | IPv6 tunnel network, e.g. `fd42:42:42::/64`. Off when empty. |
-| `IHASVPN_DNS` | `1.1.1.1, 1.0.0.1` | Resolvers handed to clients on first run. |
-| `IHASVPN_INTERFACE` | `wg0` | Interface name. |
-| `IHASVPN_EGRESS_INTERFACE` | auto | Interface to masquerade on. Auto uses the default route. |
-| `IHASVPN_HTTP_LISTEN` | `:51821` | Console listen address. |
-| `IHASVPN_TLS_SELF_SIGNED` | `false` | Serve HTTPS with a certificate generated into `/data`. |
-| `IHASVPN_TLS_CERT`, `IHASVPN_TLS_KEY` | | Serve HTTPS with your own certificate. |
-| `IHASVPN_SECURE_COOKIES` | `false` | Mark cookies `Secure` when TLS terminates at a proxy. |
-| `IHASVPN_TRUSTED_PROXIES` | | CIDRs whose `X-Forwarded-For` is believed. |
-| `IHASVPN_METRICS_TOKEN` | | Bearer token for `/metrics`. A signed-in session works too. |
-| `IHASVPN_SESSION_IDLE` | `12h` | Sign out after this much inactivity. |
-| `IHASVPN_SESSION_MAX` | `168h` | Sign out after this long regardless. |
-| `IHASVPN_TRAFFIC_RETENTION` | `2160h` | How long usage history is kept (90 days). |
-| `IHASVPN_POLL_INTERVAL` | `2s` | How often the interface counters are read. |
-| `IHASVPN_BACKEND` | `auto` | `kernel`, `userspace` or `mock`. Auto prefers the kernel. |
-| `IHASVPN_MANAGE_FIREWALL` | `true` | Set to `false` if the host owns the NAT rules. |
-| `IHASVPN_MANAGE_SYSCTL` | `true` | Set to `false` if the host has tuned itself. |
-| `IHASVPN_DATA_DIR` | `/data` | Where the database and TLS files live. |
-| `IHASVPN_LOG_LEVEL`, `IHASVPN_LOG_JSON` | `info`, `false` | Logging. |
+| `VPN20_ENDPOINT` | | Public hostname or IP for client configs. Also asked for at first-run setup. |
+| `VPN20_PORT` | `51820` | UDP listen port. |
+| `VPN20_SUBNET` | `10.8.0.0/24` | IPv4 tunnel network; the server takes the first address. |
+| `VPN20_SUBNET6` | | IPv6 tunnel network, e.g. `fd42:42:42::/64`. Off when empty. |
+| `VPN20_DNS` | `1.1.1.1, 1.0.0.1` | Resolvers handed to clients on first run. |
+| `VPN20_INTERFACE` | `wg0` | Interface name. |
+| `VPN20_EGRESS_INTERFACE` | auto | Interface to masquerade on. Auto uses the default route. |
+| `VPN20_HTTP_LISTEN` | `:51821` | Console listen address. |
+| `VPN20_TLS_SELF_SIGNED` | `false` | Serve HTTPS with a certificate generated into `/data`. |
+| `VPN20_TLS_CERT`, `VPN20_TLS_KEY` | | Serve HTTPS with your own certificate. |
+| `VPN20_SECURE_COOKIES` | `false` | Mark cookies `Secure` when TLS terminates at a proxy. |
+| `VPN20_TRUSTED_PROXIES` | | CIDRs whose `X-Forwarded-For` is believed. |
+| `VPN20_METRICS_TOKEN` | | Bearer token for `/metrics`. A signed-in session works too. |
+| `VPN20_SESSION_IDLE` | `12h` | Sign out after this much inactivity. |
+| `VPN20_SESSION_MAX` | `168h` | Sign out after this long regardless. |
+| `VPN20_TRAFFIC_RETENTION` | `2160h` | How long usage history is kept (90 days). |
+| `VPN20_POLL_INTERVAL` | `2s` | How often the interface counters are read. |
+| `VPN20_BACKEND` | `auto` | `kernel`, `userspace` or `mock`. Auto prefers the kernel. |
+| `VPN20_MANAGE_FIREWALL` | `true` | Set to `false` if the host owns the NAT rules. |
+| `VPN20_MANAGE_SYSCTL` | `true` | Set to `false` if the host has tuned itself. |
+| `VPN20_DATA_DIR` | `/data` | Where the database and TLS files live. |
+| `VPN20_LOG_LEVEL`, `VPN20_LOG_JSON` | `info`, `false` | Logging. |
 
 ## Locked out?
 
 ```sh
-docker exec -it ihasvpn ihasvpn reset-password admin
+docker exec -it vpn20 vpn20 reset-password admin
 ```
 
 sets a new password for that user, clears their second factor and ends
@@ -164,13 +137,26 @@ call it from the same origin or from a non-browser client.
 
 ```sh
 cd web && npm ci && npm run build && cd ..
-go build ./cmd/ihasvpn
+go build ./cmd/vpn20
 ```
 
-The UI is embedded in the binary. `docker build -t ihasvpn .` does both steps.
+The UI is embedded in the binary. `docker build -t vpn20 .` does both steps.
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the development loop against the
 mock data plane, which needs no privileges.
 
+## Upgrading an existing installation
+
+Back up the existing data volume before upgrading. Configuration now uses
+`VPN20_*` environment variables, the command is `vpn20`, the database defaults
+to `/data/vpn20.db`, and the firewall table is `vpn20`. Set `VPN20_DB` to your
+existing database path and `VPN20_DATA_VOLUME` to your existing Docker volume
+name to keep all users, keys, peers and history. Stop the previous container
+before starting VPN20 and remove its old firewall table after shutdown.
+Existing browser sessions end; sign in again. Existing authenticator codes
+continue to work; new QR enrollments use the VPN20 issuer.
+
 ## Licence
 
-AGPL-3.0-or-later. See [LICENSE](LICENSE).
+AGPL-3.0-or-later. See [LICENSE](LICENSE) and [NOTICE](NOTICE) for upstream
+copyright and third-party notices. VPN20 branding and modifications are
+maintained by Công ty TNHH TN20.

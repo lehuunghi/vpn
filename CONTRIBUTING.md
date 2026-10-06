@@ -1,11 +1,11 @@
-# Contributing to ihasvpn
+# Contributing to VPN20
 
 Thanks for your interest. Bug reports, feature requests, code and
 documentation are all welcome.
 
 ## Before you start
 
-- ihasvpn is one container: the WireGuard server and the UI that manages it.
+- vpn20 is one container: the WireGuard server and the UI that manages it.
   Contributions that need a second service (a database, a message queue, a
   separate frontend host) are out of scope.
 - The kernel data plane is the point. Anything on the packet path has to
@@ -22,7 +22,7 @@ You need Go (see `go.mod` for the version), Node 26 and Docker.
 cd web && npm ci && npm run dev
 
 # Backend against the in-memory mock data plane -- no privileges needed
-IHASVPN_BACKEND=mock IHASVPN_DATA_DIR=/tmp/ihasvpn IHASVPN_HTTP_LISTEN=127.0.0.1:51821 go run ./cmd/ihasvpn
+VPN20_BACKEND=mock VPN20_DATA_DIR=/tmp/vpn20 VPN20_HTTP_LISTEN=127.0.0.1:51821 go run ./cmd/vpn20
 ```
 
 The mock simulates peers handshaking and moving traffic so the dashboard has
@@ -30,9 +30,9 @@ something to show. For the real thing:
 
 ```sh
 cd web && npm run build && cd ..
-docker build -t ihasvpn:dev .
+docker build -t vpn20:dev .
 docker run --rm --cap-add NET_ADMIN --sysctl net.ipv4.ip_forward=1 \
-  -p 51820:51820/udp -p 127.0.0.1:51821:51821 -v ihasvpn-dev:/data ihasvpn:dev
+  -p 51820:51820/udp -p 127.0.0.1:51821:51821 -v vpn20-dev:/data vpn20:dev
 ```
 
 ## Before you commit
@@ -42,7 +42,7 @@ CI checks are not a substitute for building locally. Run, in this order:
 ```sh
 cd web && npm run build && cd ..     # type-checks and builds the UI
 go vet ./... && go test -count=1 ./...
-docker build -t ihasvpn:dev .            # when the change reaches the image
+docker build -t vpn20:dev .            # when the change reaches the image
 ```
 
 `go test` covers the engine against the mock data plane and the whole HTTP

@@ -1,9 +1,9 @@
-// Command ihasvpn runs the WireGuard server and its admin UI.
+// Command vpn20 runs the WireGuard server and its admin UI.
 //
-//	ihasvpn                    run the server (the container's default)
-//	ihasvpn reset-password U   set a new password for admin user U and drop
+//	vpn20                    run the server (the container's default)
+//	vpn20 reset-password U   set a new password for admin user U and drop
 //	                       their sessions and second factor; for lockouts
-//	ihasvpn version            print the version
+//	vpn20 version            print the version
 package main
 
 import (
@@ -19,19 +19,19 @@ import (
 
 	"golang.org/x/term"
 
-	"github.com/Coffey-Labs/ihasvpn/internal/auth"
-	"github.com/Coffey-Labs/ihasvpn/internal/config"
-	"github.com/Coffey-Labs/ihasvpn/internal/engine"
-	"github.com/Coffey-Labs/ihasvpn/internal/server"
-	"github.com/Coffey-Labs/ihasvpn/internal/store"
-	"github.com/Coffey-Labs/ihasvpn/internal/wg"
+	"github.com/lehuunghi/vpn/internal/auth"
+	"github.com/lehuunghi/vpn/internal/config"
+	"github.com/lehuunghi/vpn/internal/engine"
+	"github.com/lehuunghi/vpn/internal/server"
+	"github.com/lehuunghi/vpn/internal/store"
+	"github.com/lehuunghi/vpn/internal/wg"
 )
 
 func main() {
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
 		case "version", "--version", "-v":
-			fmt.Println("ihasvpn", engine.Version)
+			fmt.Println("VPN20", engine.Version)
 			return
 		case "reset-password":
 			if err := resetPassword(os.Args[2:]); err != nil {
@@ -49,14 +49,14 @@ func main() {
 		}
 	}
 	if err := run(); err != nil {
-		fmt.Fprintln(os.Stderr, "ihasvpn:", err)
+		fmt.Fprintln(os.Stderr, "vpn20:", err)
 		os.Exit(1)
 	}
 }
 
-const usage = `usage: ihasvpn [serve | reset-password <user> | version]
+const usage = `usage: vpn20 [serve | reset-password <user> | version]
 
-Configuration is read from IHASVPN_* environment variables; see the README.
+Configuration is read from VPN20_* environment variables; see the README.
 `
 
 func newLogger(cfg *config.Config) *slog.Logger {
@@ -101,7 +101,7 @@ func run() error {
 		return err
 	}
 	log := newLogger(cfg)
-	log.Info("starting ihasvpn", "version", engine.Version)
+	log.Info("starting VPN20", "version", engine.Version)
 
 	st, err := store.Open(cfg.DBPath)
 	if err != nil {
@@ -146,7 +146,7 @@ func run() error {
 // It runs inside the container against the same database.
 func resetPassword(args []string) error {
 	if len(args) != 1 {
-		return errors.New("usage: ihasvpn reset-password <username>")
+		return errors.New("usage: vpn20 reset-password <username>")
 	}
 	cfg, err := config.FromEnv()
 	if err != nil {
@@ -163,7 +163,7 @@ func resetPassword(args []string) error {
 		return fmt.Errorf("no user named %q", args[0])
 	}
 	var pw string
-	if v := os.Getenv("IHASVPN_NEW_PASSWORD"); v != "" {
+	if v := os.Getenv("VPN20_NEW_PASSWORD"); v != "" {
 		pw = v
 	} else {
 		fmt.Fprint(os.Stderr, "New password: ")

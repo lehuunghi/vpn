@@ -1,12 +1,5 @@
-/* Dark is the default. theme.ts resolves the user's choice (dark, light or
-   follow the system) onto <html data-theme>, so the stylesheet only needs the
-   one override below.
-
-   The palette is ihasmail's: the teal-navy of ihasmail.org, warmed by the
-   orange the cat is drawn in. Dark takes the ihasmail app's "ihasmail" theme
-   as it is. Light takes that theme's contrast-checked tiers, with the accent
-   from ihasmail.org's light scheme, since the app's lighter teal is under
-   4.5:1 behind the white text on a primary button. */
+/* Dark is the default. theme.ts resolves dark, light or system mode on
+   <html data-theme>. VPN20 uses teal and navy with orange traffic highlights. */
 :root {
   --bg: #0d2430;
   --bg-elev: #12303e;
@@ -26,7 +19,7 @@
   --bad: #f87171;
   --bad-soft: rgba(248, 113, 113, 0.15);
   --info: #6fdcd6;
-  /* Traffic: received in the cat's orange, sent in the shield's teal. */
+  /* Traffic: received in orange, sent in teal. */
   --rx: #f9a34b;
   --tx: #46cac3;
   --backdrop: rgba(6, 20, 27, 0.6);

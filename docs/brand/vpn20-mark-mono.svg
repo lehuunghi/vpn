@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="VPN20">
+  <path d="M64 6 L114 24 V62 L102 88 L64 122 L26 88 L14 62 V24 Z" fill="none" stroke="currentColor" stroke-width="6" stroke-linejoin="round"/>
+  <path d="M36 50 V42 H58 V58 L36 80 H58 M73 42 H94 V80 H73 Z" fill="none" stroke="currentColor" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

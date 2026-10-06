@@ -7,12 +7,12 @@ patched.
 
 ## Reporting a vulnerability
 
-**Please do not open a public issue for a security problem.** Email
-**johnellisATlinuxDOTcom** with what you found, how to reproduce it and what
-you think the impact is. You will get an acknowledgement within a few days
-and a fix or a plan before anything is made public.
+Use [GitHub private vulnerability reporting](https://github.com/lehuunghi/vpn/security/advisories/new)
+when it is enabled for this repository. Otherwise contact Công ty TNHH TN20
+through your established support channel. Do not include credentials, private
+keys or exploit details in a public issue.
 
-## What ihasvpn does to protect itself
+## What VPN20 does to protect itself
 
 - The admin UI requires a password (argon2id, 64 MiB, 3 passes) and offers
   time-based one-time codes with recovery codes. Sessions are random 256-bit
@@ -36,8 +36,8 @@ and a fix or a plan before anything is made public.
 ## What you must do
 
 - Do not expose port 51821 to the internet without TLS. Either set
-  `IHASVPN_TLS_SELF_SIGNED=true` (or `IHASVPN_TLS_CERT`/`IHASVPN_TLS_KEY`) or put a
+  `VPN20_TLS_SELF_SIGNED=true` (or `VPN20_TLS_CERT`/`VPN20_TLS_KEY`) or put a
   TLS-terminating reverse proxy in front and list it in
-  `IHASVPN_TRUSTED_PROXIES` so client addresses in the audit log are right.
+  `VPN20_TRUSTED_PROXIES` so client addresses in the audit log are right.
 - Turn on two-factor authentication for every administrator.
 - Keep the `/data` volume private: it holds every peer's private key.

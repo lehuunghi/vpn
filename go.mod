@@ -1,4 +1,4 @@
-module github.com/Coffey-Labs/ihasvpn
+module github.com/lehuunghi/vpn
 
 go 1.27.1
 

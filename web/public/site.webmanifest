@@ -1,6 +1,6 @@
 {
-  "name": "ihasvpn",
-  "short_name": "ihasvpn",
+  "name": "VPN20",
+  "short_name": "VPN20",
   "description": "Self-hosted WireGuard server",
   "start_url": "/",
   "display": "standalone",

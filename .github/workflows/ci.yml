@@ -1,34 +1,11 @@
-# CI and image publishing on GitHub Actions, for the GitHub replica of this
-# repository. Gitea (git.coffeylabs.org) is the source of truth: it pushes
-# every commit and tag here through a push mirror, and this workflow builds
-# what arrives. Pull requests live on Gitea, so there is no pull_request
-# trigger -- a PR's branch reaches this copy as an ordinary push.
-#
-# The switch is the org variable BUILD_ON, set on both forges. With
-# BUILD_ON=github every job here runs, the heavy jobs in .gitea/workflows/ci.yml
-# skip, and Gitea's own run waits for the result this workflow reports back.
-# With it unset, every job here skips and Gitea builds everything as before --
-# which is also the way back if GitHub is ever unavailable: unset it on Gitea.
-#
-# This file does what .gitea/workflows/ci.yml does, job for job; that file is
-# the spec for what CI covers. The difference is the image publish: here each
-# architecture builds on its own native runner (`ubuntu-24.04-arm` is free for
-# public repositories) instead of arm64 under QEMU, and the two digests are
-# joined into one tag.
-#
-# Images go to the Gitea registry (vars.REGISTRY), as they do from Gitea, not
-# to GHCR. Credentials: the org secret GITEA_TOKEN, a jcoffey-dev Gitea token
-# with write:repository and write:package -- the registry push, the package
-# link, and the commit status reported back to Gitea.
-#
-# Every `uses:` is pinned to a full commit SHA with the release in a trailing
-# comment. Do not "simplify" one back to a tag.
+# VPN20 checks and image publishing for Công ty TNHH TN20.
 name: ci
 
 on:
   push:
     branches: ['**']
-    tags: ['**']
+    tags: ['v*']
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -38,32 +15,8 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  GITEA_URL: ${{ vars.GITEA_URL }}
-  REGISTRY: ${{ vars.REGISTRY }}
-
 jobs:
-  # Tells Gitea a result is on its way, so the commit does not look unchecked
-  # while the build runs.
-  pending:
-    if: ${{ vars.BUILD_ON == 'github' }}
-    runs-on: ubuntu-latest
-    steps:
-      - env:
-          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
-          CONTEXT: github/ci (${{ github.ref_type }})
-        run: |
-          jq -n --arg c "$CONTEXT" --arg u "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
-            '{state:"pending", context:$c, target_url:$u, description:"GitHub Actions"}' |
-          curl -fsS -o /dev/null -X POST -H "Authorization: token $GITEA_TOKEN" -H 'Content-Type: application/json' \
-            --data @- "$GITEA_URL/api/v1/repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA"
-
-  # The Go binary embeds the built web assets, so the frontend build comes
-  # first. As on Gitea, its output is not handed on: the committed
-  # dist/.gitkeep is enough for the embed to compile, and the image build does
-  # its own frontend build in the Dockerfile.
   web:
-    if: ${{ vars.BUILD_ON == 'github' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -78,7 +31,6 @@ jobs:
           npm run build
 
   go:
-    if: ${{ vars.BUILD_ON == 'github' }}
     needs: [web]
     runs-on: ubuntu-latest
     steps:
@@ -88,208 +40,40 @@ jobs:
           go-version-file: go.mod
       - run: go vet ./...
       - run: go test -count=1 ./...
-      # Unpinned on purpose, as on Gitea: a vulnerability check wants today's
-      # database, not a pinned copy of last month's.
       - run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
-  # Proves the Dockerfile still builds, without pushing. Branches only; a tag
-  # builds the real image below.
   docker-build:
-    if: ${{ vars.BUILD_ON == 'github' && github.ref_type != 'tag' }}
-    needs: [web]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - run: docker build -t "ihasvpn:ci-${GITHUB_SHA::8}" .
-
-  # ----------------------------------------------------------- publish ------
-  # The version is the tag without its leading "v", the same string the Gitea
-  # publish job builds with, so /api/health reports the same thing whichever
-  # forge built the image.
-  build:
-    if: ${{ vars.BUILD_ON == 'github' && github.ref_type == 'tag' }}
+    if: github.ref_type != 'tag'
     needs: [web, go]
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: linux/amd64
-            runner: ubuntu-latest
-          - platform: linux/arm64
-            runner: ubuntu-24.04-arm
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - run: |
-          echo "IMAGE=${REGISTRY}/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
-          echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
-      - uses: docker/setup-buildx-action@594f3bf4285d9ea8dc53c9a0c9c4092420091003 # v4.4.0
-      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        with:
-          registry: ${{ vars.REGISTRY }}
-          username: jcoffey-dev
-          password: ${{ secrets.GITEA_TOKEN }}
-      - name: Build and push by digest
-        id: push
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          platforms: ${{ matrix.platform }}
-          build-args: IHASVPN_VERSION=${{ env.VERSION }}
-          # Attestations would add manifests of their own to the index, and
-          # `imagetools create` below expects just the two it pushed.
-          provenance: false
-          sbom: false
-          cache-from: type=gha,scope=${{ matrix.platform }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.platform }}
-          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
-      - name: Save the digest
-        run: |
-          mkdir -p /tmp/digests
-          digest="${{ steps.push.outputs.digest }}"
-          touch "/tmp/digests/${digest#sha256:}"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: digest-${{ strategy.job-index }}
-          path: /tmp/digests/*
-          # Kept a week, and overwritable, so a re-run of the build or of
-          # publish alone still finds (or replaces) the digests.
-          retention-days: 7
-          overwrite: true
-          if-no-files-found: error
-
-  # Joins the per-architecture digests into :<version> and :latest -- every
-  # tag moves :latest, as it does on Gitea -- then links the package to the
-  # repository so it shows on its Packages tab (idempotent).
-  publish:
-    if: ${{ vars.BUILD_ON == 'github' && github.ref_type == 'tag' }}
-    needs: [build]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          path: /tmp/digests
-          pattern: digest-*
-          merge-multiple: true
-      - uses: docker/setup-buildx-action@594f3bf4285d9ea8dc53c9a0c9c4092420091003 # v4.4.0
-      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        with:
-          registry: ${{ vars.REGISTRY }}
-          username: jcoffey-dev
-          password: ${{ secrets.GITEA_TOKEN }}
-      - name: Create the manifest
-        run: |
-          IMAGE="${REGISTRY}/${GITHUB_REPOSITORY,,}"
-          VERSION="${GITHUB_REF_NAME#v}"
-          refs=()
-          for f in /tmp/digests/*; do
-            refs+=("${IMAGE}@sha256:$(basename "$f")")
-          done
-          docker buildx imagetools create -t "${IMAGE}:${VERSION}" -t "${IMAGE}:latest" "${refs[@]}"
-          docker buildx imagetools inspect "${IMAGE}:${VERSION}"
-      - env:
-          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
-        run: |
-          owner="${GITHUB_REPOSITORY%%/*}"; name="${GITHUB_REPOSITORY#*/}"
-          curl -fsS -o /dev/null -X POST -H "Authorization: token $GITEA_TOKEN" \
-            "$GITEA_URL/api/v1/packages/${owner,,}/container/${name,,}/-/link/${name}" \
-            || echo "package already linked (or link refused); not fatal"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: docker build -t "vpn20:ci-${GITHUB_SHA::8}" .
 
-  # ------------------------------------------------------ ghcr replica ------
-  # Copies the release image from the Gitea registry, which stays the
-  # authoritative one, to ghcr.io under the same version tag and :latest. It is
-  # a copy, not a second build: the digest on GHCR is the digest on the
-  # registry, so `docker pull ghcr.io/...` gets exactly the same image. Left
-  # out of the report to Gitea, like the release copy, so a GHCR problem
-  # cannot fail a release.
-  ghcr:
-    if: ${{ vars.BUILD_ON == 'github' && github.ref_type == 'tag' }}
-    needs: [publish]
+  publish:
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    needs: [web, go]
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
     steps:
-      - env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          src="${{ vars.REGISTRY }}/${GITHUB_REPOSITORY,,}"
-          dst="ghcr.io/${GITHUB_REPOSITORY,,}"
-          tag="${GITHUB_REF_NAME#v}"
-          echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
-          docker buildx imagetools create -t "$dst:$tag" -t "$dst:latest" "$src:$tag"
-          want="$(docker buildx imagetools inspect "$src:$tag" --format '{{json .Manifest.Digest}}')"
-          got="$(docker buildx imagetools inspect "$dst:$tag" --format '{{json .Manifest.Digest}}')"
-          echo "registry $src:$tag = $want"
-          echo "ghcr     $dst:$tag = $got"
-          [ "$want" = "$got" ] || echo "::warning::GHCR digest differs from the registry's"
-          docker logout ghcr.io
-
-  # ---------------------------------------------------- github release ------
-  # Copies this tag's Gitea release -- notes and files -- to a GitHub release,
-  # so the replica's Releases page, and anyone watching it, keeps up. Gitea's
-  # release is the real one; this is left out of the report to Gitea, so a
-  # failure here cannot fail a release. PR and issue numbers in the notes are
-  # rewritten to Gitea links: on GitHub a bare #16 is some other PR.
-  github-release:
-    if: ${{ vars.BUILD_ON == 'github' && github.ref_type == 'tag' }}
-    needs: [publish]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    env:
-      GITEA_URL: ${{ vars.GITEA_URL }}
-      GH_TOKEN: ${{ github.token }}
-      TAG: ${{ github.ref_name }}
-    steps:
-      - run: |
-          set -euo pipefail
-          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "GitHub already has a release for $TAG"; exit 0
-          fi
-          # The Gitea release exists by now if this run made it; if the weekly
-          # release job made it, it came before the tag. Allow a few minutes.
-          code=0
-          for _ in $(seq 1 15); do
-            code="$(curl -sS -o rel.json -w '%{http_code}' "$GITEA_URL/api/v1/repos/$GITHUB_REPOSITORY/releases/tags/$TAG")"
-            [ "$code" = 200 ] && break
-            sleep 20
-          done
-          if [ "$code" != 200 ]; then echo "No Gitea release for $TAG; nothing to copy"; exit 0; fi
-          if [ "$(jq -r .draft rel.json)" = true ]; then echo "The Gitea release is a draft; not copying"; exit 0; fi
-          export BASE="$(jq -r '.html_url | sub("/releases/tag/.*$"; "")' rel.json)"
-          jq -r '.body // ""' rel.json | perl -pe 's{(?<![\w/&\[])#(\d+)\b}{[#$1]($ENV{BASE}/pulls/$1)}g' > notes.md
-          printf '\n\n_Mirrored from [the Gitea release](%s); report issues on [Gitea](%s/issues)._\n' \
-            "$(jq -r .html_url rel.json)" "$BASE" >> notes.md
-          files=()
-          mkdir -p files
-          while IFS=$'\t' read -r name url; do
-            curl -fsSL -o "files/$name" "$url"; files+=("files/$name")
-          done < <(jq -r '.assets[]? | [.name, .browser_download_url] | @tsv' rel.json)
-          title="$(jq -r '.name // ""' rel.json)"; [ -n "$title" ] || title="$TAG"
-          if [ "$(jq -r .prerelease rel.json)" = true ]; then kind=--prerelease; else kind=--latest; fi
-          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --title "$title" \
-            --notes-file notes.md "$kind" "${files[@]}"
-          echo "created the GitHub release for $TAG with ${#files[@]} file(s)"
-
-  # One commit status on Gitea for the whole run. Gitea's ci.yml `github` job
-  # waits on exactly this context.
-  report:
-    if: ${{ always() && vars.BUILD_ON == 'github' }}
-    needs: [pending, web, go, docker-build, build, publish]
-    runs-on: ubuntu-latest
-    steps:
-      - env:
-          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
-          CONTEXT: github/ci (${{ github.ref_type }})
-          STATE: ${{ contains(needs.*.result, 'failure') && 'failure' || (contains(needs.*.result, 'cancelled') && 'cancelled' || 'success') }}
-        run: |
-          # A cancelled run was superseded by a newer run for the same commit (the
-          # mirror can push one commit twice); that run reports. Posting "failure"
-          # here would fail the Gitea check while the real build is still going.
-          if [ "$STATE" = cancelled ]; then echo "cancelled: leaving the result to the newer run"; exit 0; fi
-          jq -n --arg s "$STATE" --arg c "$CONTEXT" --arg u "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
-            '{state:$s, context:$c, target_url:$u, description:"GitHub Actions"}' |
-          curl -fsS -o /dev/null -X POST -H "Authorization: token $GITEA_TOKEN" -H 'Content-Type: application/json' \
-            --data @- "$GITEA_URL/api/v1/repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Image version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+      - uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v3.6.0
+      - uses: docker/setup-buildx-action@594f3bf4285d9ea8dc53c9a0c9c4092420091003 # v4.4.0
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          build-args: VPN20_VERSION=${{ env.VERSION }}
+          push: true
+          tags: |
+            ghcr.io/lehuunghi/vpn20:${{ env.VERSION }}
+            ghcr.io/lehuunghi/vpn20:latest

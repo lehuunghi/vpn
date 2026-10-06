@@ -46,9 +46,9 @@ export function Layout({ children }: { children: ReactNode }) {
     <div className="shell">
       {/* Phones and narrow windows: brand and account controls up top. */}
       <header className="topbar">
-        <Link href="/" className="brand" aria-label="ihasvpn dashboard">
+        <Link href="/" className="brand" aria-label="VPN20 dashboard">
           <Mark size={30} />
-          <span className="brand-name">ihasvpn</span>
+          <span className="brand-name">VPN20</span>
         </Link>
         <div className="topbar-right">
           <LivePill />
@@ -59,11 +59,11 @@ export function Layout({ children }: { children: ReactNode }) {
 
       {/* Desktop: everything lives in the sidebar. */}
       <aside className="sidebar">
-        <Link href="/" className="brand" aria-label="ihasvpn dashboard">
+        <Link href="/" className="brand" aria-label="VPN20 dashboard">
           <Mark size={34} />
           <span>
-            <span className="brand-name">ihasvpn</span>
-            <span className="brand-sub">Self-hosted WireGuard</span>
+            <span className="brand-name">VPN20</span>
+            <span className="brand-sub">Công ty TNHH TN20</span>
           </span>
         </Link>
         <nav className="nav" aria-label="Main">

@@ -17,10 +17,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Coffey-Labs/ihasvpn/internal/auth"
-	"github.com/Coffey-Labs/ihasvpn/internal/config"
-	"github.com/Coffey-Labs/ihasvpn/internal/engine"
-	"github.com/Coffey-Labs/ihasvpn/internal/server/static"
+	"github.com/lehuunghi/vpn/internal/auth"
+	"github.com/lehuunghi/vpn/internal/config"
+	"github.com/lehuunghi/vpn/internal/engine"
+	"github.com/lehuunghi/vpn/internal/server/static"
 )
 
 // Server serves the API and UI.

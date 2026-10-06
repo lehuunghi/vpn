@@ -4,7 +4,7 @@
 
 export type ThemeChoice = "dark" | "light" | "system";
 
-const KEY = "ihasvpn.theme";
+const KEY = "vpn20.theme";
 const media = window.matchMedia("(prefers-color-scheme: light)");
 const listeners = new Set<(c: ThemeChoice) => void>();
 
