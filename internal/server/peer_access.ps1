@@ -90,7 +90,7 @@ if ($EnableRemoteDesktop) {
     }
     Set-ItemProperty $terminal -Name fDenyTSConnections -Value 0
     Set-ItemProperty $rdp -Name UserAuthentication -Value 1
-    if ((Get-Service TermService).StartType -eq 'Disabled') { Set-Service TermService -StartupType Manual }
+    Set-Service TermService -StartupType Automatic
     Start-Service TermService
     $port = [int](Get-ItemProperty $rdp).PortNumber
     foreach ($protocol in @('TCP','UDP')) {

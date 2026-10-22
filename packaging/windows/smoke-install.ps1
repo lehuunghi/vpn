@@ -41,7 +41,10 @@ try {
     if ($LASTEXITCODE) { throw 'Peer ping/RDP helper failed in Windows PowerShell 5.1' }
     foreach ($name in @('VPN20-Peer-Ping', 'VPN20-Peer-RDP-TCP', 'VPN20-Peer-RDP-UDP')) {
         $rule = Get-NetFirewallRule -Name $name
-        if ((@($rule | Get-NetFirewallAddressFilter).RemoteAddress -join ',') -ne '10.8.0.0/24') { throw 'Peer access was not restricted to the VPN subnet' }
+        $remote = @(@($rule | Get-NetFirewallAddressFilter).RemoteAddress)
+        # NetSecurity normalizes CIDR to dotted masks on some Windows builds.
+        if ($remote.Count -ne 1 -or $remote[0] -notin @('10.8.0.0/24', '10.8.0.0/255.255.255.0')) { throw "Peer access was not restricted to the VPN subnet: $($remote -join ',')" }
+        if ((@($rule | Get-NetFirewallAddressFilter).LocalAddress -join ',') -ne '10.8.0.1') { throw 'Peer access was not restricted to the VPN IP' }
         if ((@($rule | Get-NetFirewallInterfaceFilter).InterfaceAlias -join ',') -ne 'wg0') { throw 'Peer access was not restricted to the VPN adapter' }
     }
     if ((Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp').UserAuthentication -ne 1) { throw 'RDP helper did not enable NLA' }
