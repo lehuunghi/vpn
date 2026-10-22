@@ -63,6 +63,10 @@ func networkStatePath() string {
 func Apply(ctx context.Context, r Rules) error {
 	firewall.Lock()
 	defer firewall.Unlock()
+	if r.Relay {
+		_, err := powershell(ctx, networkScript+fmt.Sprintf("\nSet-VPN20RelayNetwork -Port %d -Tunnel %s -StatePath %s", r.ListenPort, psQuote(r.Iface), psQuote(networkStatePath())))
+		return err
+	}
 	if r.ClampMSS {
 		return fmt.Errorf("TCP MSS rewriting is unavailable on Windows; disable it and use a suitable tunnel MTU")
 	}

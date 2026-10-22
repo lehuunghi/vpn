@@ -138,9 +138,17 @@ func TestWindowsNativeTunnel(t *testing.T) {
 		tun *memoryTUN
 		ip  string
 	}{{c1, "10.254.250.2"}, {c2, "10.254.250.3"}} {
-		client.tun.inject <- udpPacket(client.ip, "10.254.250.1", 32000, uint16(listener.LocalAddr().(*net.UDPAddr).Port), []byte("VPN20 native echo"))
-		if _, ok := waitPayload(client.tun, []byte("VPN20 native echo"), 8*time.Second); !ok {
-			t.Fatal("encrypted UDP round trip failed")
+		echoed := false
+		for attempt := 0; attempt < 5; attempt++ {
+			client.tun.inject <- udpPacket(client.ip, "10.254.250.1", 32000, uint16(listener.LocalAddr().(*net.UDPAddr).Port), []byte("VPN20 native echo"))
+			if _, ok := waitPayload(client.tun, []byte("VPN20 native echo"), 2*time.Second); ok {
+				echoed = true
+				break
+			}
+		}
+		if !echoed {
+			state, stateErr := be.Device(context.Background())
+			t.Fatalf("encrypted UDP round trip failed for %s after retries; driver state=%+v error=%v", client.ip, state, stateErr)
 		}
 	}
 	t.Log("PASS: real WireGuardNT handshake and bidirectional UDP")
@@ -410,5 +418,14 @@ func udpPacket(src, dst string, sport, dport uint16, payload []byte) []byte {
 	binary.BigEndian.PutUint16(p[22:], dport)
 	binary.BigEndian.PutUint16(p[24:], uint16(8+len(payload)))
 	copy(p[28:], payload)
+	// Match ordinary WireGuard clients, which supply a transport checksum even
+	// for IPv4. This also exercises native receive checksum/offload validation.
+	pseudo := append([]byte(nil), p[12:20]...)
+	pseudo = append(pseudo, 0, 17, byte((8+len(payload))>>8), byte(8+len(payload)))
+	cs := checksum(append(pseudo, p[20:]...))
+	if cs == 0 {
+		cs = 0xffff
+	}
+	binary.BigEndian.PutUint16(p[26:], cs)
 	return p
 }

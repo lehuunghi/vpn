@@ -60,4 +60,12 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: docker build -t "vpn20:ci-${GITHUB_SHA::8}" .
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: go.mod
+      - name: Verify actual Docker replacement and rollback
+        run: |
+          docker build --build-arg VPN20_VERSION=1.1.0-integration -t vpn20:update-new .
+          printf 'FROM vpn20:update-new\nRUN printf "#!/bin/sh\\nexit 1\\n" > /usr/local/bin/vpn20 && chmod 0755 /usr/local/bin/vpn20\n' | docker build -t vpn20:update-bad -
+          sudo env "PATH=$PATH" "GOTOOLCHAIN=local" "VPN20_TEST_DOCKER_OLD_IMAGE=vpn20:ci-${GITHUB_SHA::8}" VPN20_TEST_DOCKER_NEW_IMAGE=vpn20:update-new VPN20_TEST_DOCKER_BAD_IMAGE=vpn20:update-bad go test -count=1 -v -timeout 8m ./internal/update -run '^TestDockerDaemonUpdate$'
 

@@ -115,7 +115,7 @@ func (e *Engine) Start(ctx context.Context) error {
 	if err := e.loadPeers(ctx); err != nil {
 		return err
 	}
-	if e.cfg.ManageSysctl && e.be.Kind() != "mock" {
+	if e.cfg.ManageSysctl && e.be.Kind() != "mock" && e.be.Kind() != "relay" {
 		results, err := netcfg.ApplyAll(netcfg.Wanted(e.cfg.Subnet6.IsValid()))
 		e.mu.Lock()
 		e.sysctls = results
@@ -197,6 +197,9 @@ func (e *Engine) loadSettings(ctx context.Context) error {
 	}
 	if !ok {
 		def := DefaultSettings(e.cfg.InitialEndpoint, e.cfg.InitialDNS, e.cfg.ListenPort)
+		if e.be.Kind() == "relay" {
+			def.ClampMSS = true
+		}
 		if runtime.GOOS == "windows" {
 			def.ClientRoutes = e.cfg.Subnet4.Masked().String()
 			if e.cfg.Subnet6.IsValid() {
@@ -260,19 +263,28 @@ func (e *Engine) loadPeers(ctx context.Context) error {
 }
 
 func (e *Engine) applyFirewall(ctx context.Context) error {
+	s := e.Settings()
+	if forwarder, ok := e.be.(wg.Forwarder); ok {
+		if err := forwarder.SetForwarding(ctx, wg.ForwardingConfig{PeerIsolation: s.PeerIsolation, ClampMSS: s.ClampMSS, Egress: e.cfg.Egress}); err != nil {
+			return err
+		}
+		e.mu.Lock()
+		e.networkMode, e.networkWarning, e.egress = "relay", "", e.cfg.Egress
+		e.mu.Unlock()
+	}
 	if !e.cfg.ManageFirewall || e.be.Kind() == "mock" {
 		return nil
 	}
 	egress := e.cfg.Egress
-	if egress == "" {
+	if egress == "" && e.be.Kind() != "relay" {
 		if d, err := netcfg.DefaultEgress(); err == nil {
 			egress = d
 		} else {
 			e.log.Warn("could not detect the default egress interface", "error", err)
 		}
 	}
-	s := e.Settings()
 	rules := netcfg.Rules{
+		Relay:         e.be.Kind() == "relay",
 		WindowsMode:   e.cfg.WindowsNetworkMode,
 		Iface:         e.cfg.Iface,
 		Egress:        egress,
@@ -282,6 +294,9 @@ func (e *Engine) applyFirewall(ctx context.Context) error {
 		ClampMSS:      s.ClampMSS,
 	}
 	mode, warning := "nat", ""
+	if rules.Relay {
+		mode = "relay"
+	}
 	if err := netcfg.Apply(ctx, rules); err != nil {
 		var notice *netcfg.NetworkNotice
 		if !errors.As(err, &notice) {
@@ -303,6 +318,9 @@ func (e *Engine) applyFirewall(ctx context.Context) error {
 func (e *Engine) UpdateSettings(ctx context.Context, s Settings) error {
 	if err := s.Validate(); err != nil {
 		return err
+	}
+	if runtime.GOOS == "windows" && e.be.Kind() == "wireguardnt" && s.ClampMSS {
+		return errors.New("Điều chỉnh TCP MSS cần chế độ relay trên Windows; đặt VPN20_WINDOWS_NETWORK_MODE=relay và VPN20_BACKEND=auto")
 	}
 	old := e.Settings()
 	if err := saveSettings(ctx, e.st, &s); err != nil {

@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/netip"
 	"path"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/lehuunghi/vpn/internal/config"
 	"github.com/lehuunghi/vpn/internal/engine"
 	"github.com/lehuunghi/vpn/internal/server/static"
+	"github.com/lehuunghi/vpn/internal/update"
 )
 
 // Server serves the API and UI.
@@ -32,6 +34,7 @@ type Server struct {
 	ipLimit  *auth.Limiter
 	usrLimit *auth.Limiter
 	http     *http.Server
+	updater  *update.Manager
 }
 
 // New builds the router.
@@ -44,6 +47,15 @@ func New(cfg *config.Config, eng *engine.Engine, log *slog.Logger) *Server {
 		ipLimit:  auth.NewLimiter(20, 15*time.Minute),
 		usrLimit: auth.NewLimiter(8, 15*time.Minute),
 	}
+	mode := cfg.UpdateMode
+	if cfg.Backend == "mock" && (mode == "" || mode == "auto") {
+		mode = "disabled"
+	}
+	cert := cfg.TLSCert
+	if cfg.TLSSelfSigned && cert == "" {
+		cert = filepath.Join(cfg.DataDir, "tls.crt")
+	}
+	s.updater = update.New(update.Options{Version: engine.Version, Mode: mode, DataDir: cfg.DataDir, DBPath: cfg.DBPath, HTTPURL: update.LocalURL(cfg.HTTP, cfg.TLSEnabled()), TLSCert: cert, DockerSocket: cfg.UpdateDockerSocket, DockerContainer: cfg.UpdateDockerContainer, CertificateThumbprint: cfg.UpdateCertificateSHA1, Prerelease: cfg.UpdatePrerelease})
 	s.routes()
 	return s
 }
@@ -141,6 +153,9 @@ func (s *Server) routes() {
 	m.Handle("GET /api/users", s.authed(s.handleUsers))
 
 	// Admin role required.
+	m.Handle("GET /api/update", s.admin(s.handleUpdateStatus))
+	m.Handle("POST /api/update/check", s.admin(s.handleUpdateCheck))
+	m.Handle("POST /api/update", s.admin(s.handleUpdateStart))
 	m.Handle("POST /api/peers", s.admin(s.handleCreatePeer))
 	m.Handle("PUT /api/peers/{id}", s.admin(s.handleUpdatePeer))
 	m.Handle("DELETE /api/peers/{id}", s.admin(s.handleDeletePeer))

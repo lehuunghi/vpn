@@ -1,4 +1,14 @@
-# Routing and firewall rules are independent of optional Windows Internet NAT.
+# Relay uses ordinary host sockets and only needs the WireGuard UDP listener.
+function Set-VPN20RelayNetwork {
+    param([int]$Port, [string]$Tunnel, [string]$StatePath)
+    # Restore forwarding settings and remove VPN20's NAT left by a previous
+    # native installation. Never touch NATs or firewall groups owned by others.
+    Remove-VPN20Network -StatePath $StatePath
+    $null = New-NetFirewallRule -Name 'VPN20-WireGuard' -DisplayName 'VPN20 WireGuard UDP' -Group 'VPN20' -Direction Inbound -Action Allow -Protocol UDP -LocalPort $Port -Profile Any
+    $null = New-NetFirewallRule -Name 'VPN20-Tunnel' -DisplayName 'VPN20 relay host traffic' -Group 'VPN20' -Direction Inbound -Action Allow -InterfaceAlias $Tunnel -Profile Any
+}
+
+# Native routing and firewall rules are independent of optional Internet NAT.
 function Set-VPN20Network {
     param([string]$Tunnel, [string]$Uplink, [string]$Subnet, [int]$Port, [string]$StatePath,
         [ValidateSet('auto','routed','nat')][string]$Mode = 'auto', [switch]$IPv6)

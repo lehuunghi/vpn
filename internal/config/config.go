@@ -18,11 +18,13 @@ import (
 
 // Config is the process configuration.
 type Config struct {
-	WindowsNetworkMode string
-	DataDir            string
-	DBPath             string
-	Backend            string // auto | kernel | userspace | mock
-	Iface              string
+	UpdateMode, UpdateDockerSocket, UpdateDockerContainer, UpdateCertificateSHA1 string
+	UpdatePrerelease                                                             bool
+	WindowsNetworkMode                                                           string
+	DataDir                                                                      string
+	DBPath                                                                       string
+	Backend                                                                      string // auto | kernel | userspace | mock
+	Iface                                                                        string
 	// Listen is the UDP port WireGuard listens on.
 	ListenPort int
 	// Subnet4 / Subnet6 are the tunnel networks. The server takes the first
@@ -111,9 +113,23 @@ func envDuration(key string, def time.Duration) (time.Duration, error) {
 func FromEnv() (*Config, error) {
 	var errs []error
 	c := &Config{}
+	c.UpdateMode = strings.ToLower(env("VPN20_UPDATE_MODE", "auto"))
+	switch c.UpdateMode {
+	case "auto", "disabled", "windows", "systemd", "docker":
+	default:
+		errs = append(errs, errors.New("VPN20_UPDATE_MODE: must be auto, disabled, windows, systemd or docker"))
+	}
+	c.UpdateDockerSocket = env("VPN20_DOCKER_SOCKET", "/var/run/docker.sock")
+	c.UpdateDockerContainer = env("VPN20_UPDATE_CONTAINER", "")
+	c.UpdateCertificateSHA1 = strings.ToUpper(strings.ReplaceAll(env("VPN20_UPDATE_CERT_SHA1", ""), " ", ""))
+	if v, err := envBool("VPN20_UPDATE_PRERELEASE", false); err != nil {
+		errs = append(errs, err)
+	} else {
+		c.UpdatePrerelease = v
+	}
 	c.WindowsNetworkMode = strings.ToLower(env("VPN20_WINDOWS_NETWORK_MODE", "auto"))
-	if runtime.GOOS == "windows" && c.WindowsNetworkMode != "auto" && c.WindowsNetworkMode != "routed" && c.WindowsNetworkMode != "nat" {
-		errs = append(errs, errors.New("VPN20_WINDOWS_NETWORK_MODE: must be auto, routed or nat"))
+	if runtime.GOOS == "windows" && c.WindowsNetworkMode != "auto" && c.WindowsNetworkMode != "relay" && c.WindowsNetworkMode != "routed" && c.WindowsNetworkMode != "nat" {
+		errs = append(errs, errors.New("VPN20_WINDOWS_NETWORK_MODE: must be auto, relay, routed or nat"))
 	}
 	dataDefault, httpDefault := "/data", ":51821"
 	if runtime.GOOS == "windows" {
@@ -123,6 +139,9 @@ func FromEnv() (*Config, error) {
 	c.DataDir = env("VPN20_DATA_DIR", dataDefault)
 	c.DBPath = env("VPN20_DB", filepath.Join(c.DataDir, "vpn20.db"))
 	c.Backend = strings.ToLower(env("VPN20_BACKEND", "auto"))
+	if runtime.GOOS == "windows" && ((c.Backend == "kernel" && c.WindowsNetworkMode == "relay") || (c.Backend == "userspace" && c.WindowsNetworkMode != "auto" && c.WindowsNetworkMode != "relay")) {
+		errs = append(errs, errors.New("Windows relay requires VPN20_BACKEND=auto/userspace; routed/nat requires auto/kernel"))
+	}
 	switch c.Backend {
 	case "auto", "kernel", "userspace", "mock":
 	default:

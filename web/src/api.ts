@@ -144,7 +144,7 @@ export interface SysctlStatus {
 export interface Status {
 	platform: string;
   version: string;
-  backend: "kernel" | "userspace" | "wireguardnt" | "mock";
+  backend: "kernel" | "userspace" | "wireguardnt" | "relay" | "mock";
   interface: string;
   publicKey: string;
   listenPort: number;
@@ -153,7 +153,7 @@ export interface Status {
   subnet6?: string;
   egress?: string;
   firewallError?: string;
-  networkMode?: "nat" | "routed";
+  networkMode?: "nat" | "routed" | "relay";
   networkWarning?: string;
   firewallManaged: boolean;
   startedAt: string;
@@ -203,9 +203,24 @@ export interface SessionInfo {
 
 export type Range = "1h" | "24h" | "7d" | "30d";
 
+export interface UpdateStatus {
+  current: string;
+  method: string;
+  supported: boolean;
+  reason?: string;
+  busy: boolean;
+  latest?: { version: string; url: string; prerelease: boolean };
+  checkedAt?: string;
+  signing?: { status: string; publisher?: string; timestamped: boolean };
+  job: { id?: string; phase: string; version?: string; message?: string; updatedAt?: string };
+}
+
 // --- endpoints --------------------------------------------------------------
 
 export const api = {
+  updateStatus: () => get<UpdateStatus>("/api/update"),
+  checkUpdate: () => post<UpdateStatus>("/api/update/check"),
+  startUpdate: () => post<UpdateStatus["job"]>("/api/update"),
   setupStatus: () => get<{ needsSetup: boolean }>("/api/setup"),
   setup: (body: { username: string; password: string; endpointHost: string }) => post<Me>("/api/setup", body),
   login: (username: string, password: string) => post<{ totpRequired: boolean }>("/api/auth/login", { username, password }),

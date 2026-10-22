@@ -36,6 +36,7 @@ function New-NetFirewallRule {
     if ($global:scenario -eq 'firewall') { throw 'Firewall denied' }
     $global:createdRules++
 }
+
 function Get-NetNat {
     if ($global:scenario -eq 'missing') { throw 'Invalid class MSFT_NetNat' }
     if ($global:scenario -eq 'foreign') { [pscustomobject]@{Name='OtherApplication'; InternalIPInterfaceAddressPrefix='172.20.0.0/16'} }
@@ -68,5 +69,24 @@ function Remove-NetNat { throw 'This test must never remove another application 
 				t.Fatalf("routed fallback lost its warning or created NAT: %+v", got)
 			}
 		})
+	}
+}
+
+func TestWindowsRelayDoesNotRequireNATOrForwarding(t *testing.T) {
+	script := networkScript + `
+$global:createdRules = 0
+function Get-NetNat { param([string]$Name); if ($Name -ne 'VPN20') { throw 'Relay must only query its own NAT' } }
+function New-NetNat { throw 'Relay must not create NAT' }
+function Remove-NetNat { throw 'No owned NAT exists in this scenario' }
+function Get-NetIPInterface { throw 'Relay must not require an uplink or tunnel adapter' }
+function Set-NetIPInterface { throw 'Relay must not enable forwarding' }
+function Get-NetFirewallRule { }
+function Remove-NetFirewallRule { }
+function New-NetFirewallRule { param([string]$Name,[string]$DisplayName,[string]$Group,[string]$Direction,[string]$Action,[string]$Protocol,[int]$LocalPort,[string]$Profile,[string]$InterfaceAlias); if ($Name -eq 'VPN20-WireGuard' -and $LocalPort -ne 51820) { throw 'Unexpected listener firewall rule' }; $global:createdRules++ }
+`
+	script += fmt.Sprintf("\nSet-VPN20RelayNetwork -Port 51820 -Tunnel wg0 -StatePath %s; $global:createdRules", psQuote(filepath.Join(t.TempDir(), "state.json")))
+	out, err := powershell(context.Background(), script)
+	if err != nil || out != "2" {
+		t.Fatalf("relay firewall without WinNAT: %q %v", out, err)
 	}
 }

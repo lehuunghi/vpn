@@ -18,12 +18,18 @@ Khởi động máy chủ, mở giao diện quản trị, tạo thiết bị và
 VPN trên mô-đun WireGuard của nhân Linux, quản lý NAT và chuyển tiếp IP, đồng
 thời hiển thị thiết bị đang kết nối, tốc độ và lưu lượng sử dụng.
 
+## Hướng dẫn cài đặt đầy đủ
+
+Xem **[Cài đặt Windows, Linux, Docker, HTTPS và cập nhật tự động](docs/installation.md)**.
+Có hướng dẫn cho từng hệ điều hành, chọn kiến trúc, firewall/router, chứng chỉ, sao lưu và khôi phục.
+Quản trị viên có nút **Cập nhật phiên bản mới nhất** trong **Cài đặt**; Windows/Linux dịch vụ và Docker đã bật khả năng cập nhật được hỗ trợ.
+
 ## Cài trực tiếp trên Windows
 
-Tải bộ cài Windows x64 tại **[Releases](https://github.com/lehuunghi/vpn/releases)**.
+Tải bộ cài Windows x64/x86 tại **[Releases](https://github.com/lehuunghi/vpn/releases)**.
 Bộ cài kèm WireGuardNT và dịch vụ **VPN20** tự chạy khi bật máy, không cần
 Docker/WSL. Mở <http://127.0.0.1:51821> để thiết lập. Xem **[hướng dẫn Windows](docs/windows.md)**
-về yêu cầu WinNAT, cài đặt, nâng cấp và các khác biệt IPv6/TCP MSS so với Linux.
+về bộ cài x64/x86, relay TCP/UDP/ping ra LAN không cần WinNAT, IPv6, TCP MSS và giới hạn nền tảng.
 
 ## Container tự động trên GHCR
 
@@ -97,7 +103,7 @@ bị, TCP MSS và khóa chia sẻ trước.
 | `VPN20_SUBNET6` | | Mạng IPv6, ví dụ `fd42:42:42::/64`. Để trống để tắt. |
 | `VPN20_DNS` | `1.1.1.1, 1.0.0.1` | DNS cấp cho thiết bị khi chạy lần đầu. |
 | `VPN20_INTERFACE` | `wg0` | Tên giao diện mạng. |
-| `VPN20_EGRESS_INTERFACE` | tự động | Giao diện NAT ra ngoài; tự động dùng tuyến mặc định. |
+| `VPN20_EGRESS_INTERFACE` | tự động | Giao diện NAT ra ngoài; relay Windows tự dùng bảng định tuyến máy chủ, hoặc ghim IP nguồn theo card đã chọn. |
 | `VPN20_HTTP_LISTEN` | `:51821` | Địa chỉ lắng nghe của giao diện quản trị. |
 | `VPN20_TLS_SELF_SIGNED` | `false` | Bật HTTPS bằng chứng chỉ tự tạo, lưu trong `/data`. |
 | `VPN20_TLS_CERT`, `VPN20_TLS_KEY` | | Bật HTTPS bằng chứng chỉ và khóa của bạn. |
@@ -108,7 +114,13 @@ bị, TCP MSS và khóa chia sẻ trước.
 | `VPN20_SESSION_MAX` | `168h` | Thời hạn tối đa của phiên đăng nhập. |
 | `VPN20_TRAFFIC_RETENTION` | `2160h` | Thời gian lưu lịch sử lưu lượng, tương đương 90 ngày. |
 | `VPN20_POLL_INTERVAL` | `2s` | Chu kỳ đọc bộ đếm giao diện. |
-| `VPN20_BACKEND` | `auto` | `kernel`, `userspace` hoặc `mock`; tự động ưu tiên nhân. |
+| `VPN20_UPDATE_MODE` | `auto` | Cập nhật một chạm: `windows`, `systemd`, `docker`, `disabled`; xem docs/installation.md. |
+| `VPN20_UPDATE_PRERELEASE` | `false` | Cho phép bản thử nghiệm; bản đang chạy prerelease cũng xét bản thử nghiệm. |
+| `VPN20_UPDATE_CERT_SHA1` | trống | Ghim thumbprint chứng chỉ ký bộ cài Windows. |
+| `VPN20_DOCKER_SOCKET` | `/var/run/docker.sock` | Docker socket; chỉ gắn khi bật cập nhật Docker theo hướng dẫn. |
+| `VPN20_UPDATE_CONTAINER` | hostname | Container VPN20 được cập nhật; Compose override dùng `vpn20`. |
+| `VPN20_BACKEND` | `auto` | `kernel`, `userspace` hoặc `mock`; Linux ưu tiên nhân, Windows auto dùng relay. |
+| `VPN20_WINDOWS_NETWORK_MODE` | `auto` | Windows: `auto`/`relay` dùng IP máy chủ cho TCP/UDP/ping ra LAN/Internet; `routed`/`nat` chọn WireGuardNT. |
 | `VPN20_MANAGE_FIREWALL` | `true` | Đặt `false` nếu máy chủ tự quản lý quy tắc NAT. |
 | `VPN20_MANAGE_SYSCTL` | `true` | Đặt `false` nếu máy chủ đã được điều chỉnh sysctl. |
 | `VPN20_DATA_DIR` | `/data` | Thư mục cơ sở dữ liệu và tệp TLS. |
@@ -131,7 +143,7 @@ Dùng ứng dụng WireGuard trên iOS, Android, macOS, Windows, `wg-quick` trê
 Linux hoặc bộ định tuyến hỗ trợ WireGuard. Quét mã QR ở thẻ **Cấu hình** của
 thiết bị, hoặc tải tệp `.conf`.
 
-Cấu hình mặc định gửi toàn bộ lưu lượng qua VPN. Để định tuyến một phần, đổi
+Linux mặc định gửi toàn bộ lưu lượng qua VPN; Windows mặc định chỉ tuyến VPN và giữ DNS/Internet hiện tại của client. Để định tuyến một phần, đổi
 **Định tuyến thiết bị** thành mạng VPN hoặc mạng cần truy cập.
 
 ## API

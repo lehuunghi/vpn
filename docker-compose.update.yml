@@ -1,0 +1,11 @@
+# Optional one-click updates for the standard bridge-network Compose file.
+# The Docker socket grants host-level control: only enable this on a trusted
+# administration installation. Never expose the administration UI publicly
+# without HTTPS/authentication. No TCP Docker API is exposed.
+services:
+  vpn20:
+    environment:
+      VPN20_UPDATE_MODE: docker
+      VPN20_UPDATE_CONTAINER: vpn20
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock

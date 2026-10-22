@@ -1,0 +1,20 @@
+[Unit]
+Description=VPN20 WireGuard server and administration
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+EnvironmentFile=/etc/vpn20/vpn20.env
+ExecStart=/usr/local/bin/vpn20 serve
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=90
+UMask=0077
+LimitNOFILE=65536
+PrivateTmp=true
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

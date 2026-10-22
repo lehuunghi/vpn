@@ -1,9 +1,8 @@
 # Copyright and third-party notices
 
 VPN20 branding and modifications: Copyright (C) 2026 Công ty TNHH TN20.
-This distribution is derived from ihasvpn, Copyright (C) 2026 Coffey Labs.
-Original source: https://git.coffeylabs.org/coffey-labs/ihasvpn.
-The original copyright and AGPL-3.0-or-later licence are retained.
+Portions Copyright (C) 2026 Coffey Labs, under AGPL-3.0-or-later.
+Original copyright notices and licence terms are retained.
 
 vpn20 is licensed under the AGPL-3.0; see LICENSE. This file records work by
 other people that ships inside the binary and the image, and the terms it
@@ -42,3 +41,7 @@ Windows support also uses the official WireGuardNT binary distribution
 (license included in Windows packages), WireGuard for Windows Go packages
 (MIT), and github.com/tailscale/wf (BSD-3-Clause). These projects retain their
 respective copyrights. See the bundled licenses and Go module metadata.
+
+Windows relay also bundles the official signed Wintun binary distribution
+(license in licenses/Wintun) and gVisor netstack (Apache-2.0). Their original
+license texts are included in the Windows packages.

@@ -46,7 +46,7 @@ func NewKernel(name string, log *slog.Logger) (Backend, error) {
 }
 
 func NewUserspace(name string, log *slog.Logger) (Backend, error) {
-	return nil, errors.New("Windows uses WireGuardNT; set VPN20_BACKEND=auto or kernel")
+	return NewRelay(name, log)
 }
 
 func (b *windowsBackend) Kind() string { return "wireguardnt" }

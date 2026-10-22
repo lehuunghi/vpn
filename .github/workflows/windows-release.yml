@@ -2,13 +2,15 @@ name: Windows release
 
 on:
   push:
-    branches: [main, windows-native-release, windows-peer-fix]
+    branches: [main, windows-relay-parity]
     paths:
       - 'cmd/**'
       - 'internal/**'
       - 'web/**'
       - 'go.*'
       - 'packaging/windows/**'
+      - 'packaging/linux/**'
+      - 'VERSION'
       - 'docs/windows.md'
       - '.github/workflows/windows-release.yml'
   workflow_dispatch:
@@ -39,12 +41,33 @@ jobs:
       - run: go vet ./...
       - run: go test -count=1 ./...
       - run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+      - name: Package Linux binaries for the same release
+        run: |
+          test "$(tr -d '\r\n' < VERSION)" = "$(tr -d '\r\n' < packaging/windows/VERSION)"
+          bash packaging/linux/build.sh amd64
+          bash packaging/linux/build.sh arm64
+      - name: Verify Linux installation, upgrade and rollback
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y nftables
+          sudo env "PATH=$PATH" GITHUB_ACTIONS=true GOTOOLCHAIN=local bash packaging/linux/smoke-install.sh dist/release/*-linux-amd64.tar.gz
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: vpn20-linux
+          path: dist/release/*
+          if-no-files-found: error
 
   windows:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-2022, windows-2025]
+        include:
+          - os: windows-2022
+            arch: x64
+          - os: windows-2025
+            arch: x64
+          - os: windows-2022
+            arch: x86
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
@@ -57,14 +80,18 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-      - name: Build and verify real WireGuardNT, WinNAT and peer isolation
+      - name: Build and verify relay, WireGuardNT, WinNAT and isolation
         shell: pwsh
-        run: ./packaging/windows/build.ps1
+        env:
+          VPN20_REQUIRE_SIGNING: 'false'
+          VPN20_SIGN_PFX_BASE64: ${{ github.ref == 'refs/heads/main' && secrets.VPN20_SIGN_PFX_BASE64 || '' }}
+          VPN20_SIGN_PFX_PASSWORD: ${{ github.ref == 'refs/heads/main' && secrets.VPN20_SIGN_PFX_PASSWORD || '' }}
+        run: ./packaging/windows/build.ps1 -Architecture ${{ matrix.arch }}
       - name: Install, restart, upgrade and uninstall the actual installer
         shell: pwsh
         run: |
           $installer = (Get-ChildItem dist/release/*-setup.exe).FullName
-          ./packaging/windows/smoke-install.ps1 -Installer $installer
+          ./packaging/windows/smoke-install.ps1 -Installer $installer -Architecture ${{ matrix.arch }}
       - name: Checksums
         shell: pwsh
         run: |
@@ -73,14 +100,14 @@ jobs:
           } | Set-Content dist/release/SHA256SUMS.txt -Encoding ascii
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: vpn20-windows-${{ matrix.os }}
+          name: vpn20-windows-${{ matrix.os }}-${{ matrix.arch }}
           path: dist/release/*
           if-no-files-found: error
       - name: Preserve diagnostics on failure
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: windows-failure-diagnostics-${{ matrix.os }}
+          name: windows-failure-diagnostics-${{ matrix.os }}-${{ matrix.arch }}
           path: |
             C:/ProgramData/VPN20/vpn20.log*
             C:/ProgramData/VPN20/install-error.txt
@@ -97,16 +124,24 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: vpn20-windows-windows-2022
+          pattern: vpn20-windows-windows-2022-*
+          merge-multiple: true
           path: release
-      - name: Publish verified Windows installer
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: vpn20-linux
+          path: release
+      - name: Publish verified Windows and Linux packages
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           version="$(tr -d '\r\n' < packaging/windows/VERSION)"
           tag="v$version"
+          (cd release && sha256sum VPN20-* Enable-VPN20-PeerAccess.ps1 > SHA256SUMS.txt)
           if gh release view "$tag" >/dev/null 2>&1; then
             echo "Release $tag already exists. Bump packaging/windows/VERSION to publish another version."
             exit 0
           fi
-          gh release create "$tag" release/* --target "$GITHUB_SHA" --prerelease --title "VPN20 $version — Windows x64" --notes-file packaging/windows/release-notes.md
+          release_flags=(--latest)
+          if [[ "$version" == *-* ]]; then release_flags=(--prerelease); fi
+          gh release create "$tag" release/* --target "$GITHUB_SHA" "${release_flags[@]}" --title "VPN20 $version — Windows and Linux" --notes-file packaging/windows/release-notes.md

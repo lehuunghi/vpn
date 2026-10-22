@@ -28,6 +28,7 @@ RUN apk add --no-cache nftables wireguard-go wireguard-tools ca-certificates tzd
 COPY --from=build /vpn20 /usr/local/bin/vpn20
 COPY LICENSE NOTICE /usr/share/doc/vpn20/
 ENV VPN20_DATA_DIR=/data \
+	VPN20_UPDATE_MODE=docker \
     VPN20_HTTP_LISTEN=:51821
 LABEL org.opencontainers.image.title="VPN20" \
     org.opencontainers.image.vendor="Công ty TNHH TN20" \
@@ -36,6 +37,6 @@ LABEL org.opencontainers.image.title="VPN20" \
     org.opencontainers.image.licenses="AGPL-3.0-or-later"
 VOLUME ["/data"]
 EXPOSE 51820/udp 51821/tcp
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
-    CMD wget -qO- http://127.0.0.1:51821/api/health || exit 1
+HEALTHCHECK --interval=10s --timeout=5s --start-period=60s \
+    CMD ["/usr/local/bin/vpn20", "healthcheck"]
 ENTRYPOINT ["vpn20"]

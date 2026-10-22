@@ -7,6 +7,9 @@
 #ifndef OutputDir
   #error OutputDir must be supplied by build.ps1
 #endif
+#ifndef Architecture
+  #define Architecture "x64"
+#endif
 
 [Setup]
 AppId={{F46A58C2-8B71-4EA8-BFF5-D2C0C0BB5020}
@@ -21,19 +24,28 @@ DisableProgramGroupPage=yes
 LicenseFile={#SourceDir}\LICENSE
 InfoAfterFile={#SourceDir}\README-Windows.md
 OutputDir={#OutputDir}
-OutputBaseFilename=VPN20-{#Version}-windows-x64-setup
+OutputBaseFilename=VPN20-{#Version}-windows-{#Architecture}-setup
 SetupIconFile=..\..\web\public\favicon.ico
 UninstallDisplayIcon={app}\vpn20.ico
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
 PrivilegesRequired=admin
-ArchitecturesAllowed=x64compatible
-ArchitecturesInstallIn64BitMode=x64compatible
-MinVersion=10.0.17763
+#if Architecture == "x64"
+ArchitecturesAllowed=x64os
+ArchitecturesInstallIn64BitMode=x64os
+#else
+ArchitecturesAllowed=x86compatible and not arm64
+#endif
+MinVersion=10.0.14393
 CloseApplications=no
 RestartApplications=no
 SetupLogging=yes
+#ifdef SignedBuild
+SignTool=vpn20sign
+SignedUninstaller=yes
+SignToolRetryCount=3
+#endif
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"

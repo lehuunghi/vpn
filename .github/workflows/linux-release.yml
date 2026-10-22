@@ -1,0 +1,59 @@
+name: Linux packages
+on:
+  push:
+    tags: ['v[0-9]*']
+    branches: [windows-relay-parity]
+    paths: ['cmd/**', 'internal/**', 'packaging/linux/**', 'web/**', 'go.*', 'VERSION', '.github/workflows/linux-release.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 26
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: go.mod
+      - name: Verify and package
+        run: |
+          npm --prefix web ci --ignore-scripts --no-audit --no-fund
+          npm --prefix web run build
+          go vet ./...
+          go test -count=1 ./...
+          if [ "$GITHUB_REF_TYPE" = tag ]; then export VPN20_VERSION="${GITHUB_REF_NAME#v}"; fi
+          bash packaging/linux/build.sh '${{ matrix.arch }}'
+      - name: Verify real systemd installation, update and rollback
+        if: matrix.arch == 'amd64'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y nftables
+          sudo env "PATH=$PATH" GITHUB_ACTIONS=true GOTOOLCHAIN=local bash packaging/linux/smoke-install.sh dist/release/*-linux-amd64.tar.gz
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: vpn20-linux-${{ matrix.arch }}
+          path: dist/release/*
+  publish:
+    needs: build
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: vpn20-linux-*
+          merge-multiple: true
+          path: release
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes
+          gh release upload "$GITHUB_REF_NAME" release/* --clobber

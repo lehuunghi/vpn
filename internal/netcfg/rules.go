@@ -4,6 +4,8 @@ import "net/netip"
 
 // Rules describes the firewall vpn20 wants.
 type Rules struct {
+	// Relay owns packet forwarding; host configuration only opens WireGuard UDP.
+	Relay bool
 	// WindowsMode is auto, routed (peer/LAN access), or nat (require WinNAT).
 	WindowsMode string
 	// Iface is the WireGuard interface name, e.g. wg0.

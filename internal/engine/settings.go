@@ -58,9 +58,6 @@ func DefaultSettings(endpointHost, dns string, port int) Settings {
 // Validate checks settings coming in from the API.
 func (s *Settings) Validate() error {
 	var errs []error
-	if runtime.GOOS == "windows" && s.ClampMSS {
-		errs = append(errs, errors.New("Windows không hỗ trợ điều chỉnh TCP MSS; hãy tắt tùy chọn này và đặt MTU phù hợp"))
-	}
 	s.EndpointHost = strings.TrimSpace(s.EndpointHost)
 	if s.EndpointHost == "" {
 		errs = append(errs, errors.New("endpoint host is required"))
