@@ -23,6 +23,10 @@ func AllowPublicHTTPS(ctx context.Context, address string) error {
 }
 
 func RemovePublicHTTPS(ctx context.Context) error {
-	_, err := powershell(ctx, "Get-NetFirewallRule -Name 'VPN20-Public-HTTPS' -ErrorAction SilentlyContinue | Remove-NetFirewallRule")
+	// Missing rules are normal when the feature was never enabled. An ignored
+	// Get-NetFirewallRule error must not become powershell.exe's exit status.
+	_, err := powershell(ctx, removePublicHTTPSScript)
 	return err
 }
+
+const removePublicHTTPSScript = "$rules = @(Get-NetFirewallRule -Name 'VPN20-Public-HTTPS' -ErrorAction SilentlyContinue); if ($rules.Count) { $rules | Remove-NetFirewallRule -ErrorAction Stop }; exit 0"
