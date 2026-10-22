@@ -83,7 +83,6 @@ func TestWindowsNativeTunnel(t *testing.T) {
 	if err := adapter.SetLogging(driver.AdapterLogOn); err != nil {
 		t.Fatal(err)
 	}
-	nativePacketDiagnostics(t)
 	egress, err := netcfg.DefaultEgress()
 	if err != nil {
 		t.Fatal(err)
@@ -107,6 +106,9 @@ func TestWindowsNativeTunnel(t *testing.T) {
 		}
 	}
 	apply()
+	// Register after network cleanup so filters still exist when a failed test
+	// records their IDs and conditions (testing cleanups run in reverse order).
+	nativePacketDiagnostics(t)
 
 	newClient := func(ip string) *memoryTUN {
 		priv, err := wg.GeneratePrivateKey()
