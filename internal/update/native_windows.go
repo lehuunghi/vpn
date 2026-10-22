@@ -44,9 +44,25 @@ func nativeAvailable(mode string) string {
 	return ""
 }
 
-func ps(ctx context.Context, script string) error {
-	cmd := exec.CommandContext(ctx, filepath.Join(os.Getenv("SystemRoot"), "System32", "WindowsPowerShell", "v1.0", "powershell.exe"), "-NoProfile", "-NonInteractive", "-Command", "$ErrorActionPreference='Stop'; "+script)
+func powershellCommand(ctx context.Context, script string) *exec.Cmd {
+	home := filepath.Join(os.Getenv("SystemRoot"), "System32", "WindowsPowerShell", "v1.0")
+	cmd := exec.CommandContext(ctx, filepath.Join(home, "powershell.exe"), "-NoProfile", "-NonInteractive", "-Command", script)
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	// A PowerShell 7 parent can export its incompatible Core module path.
+	// These helpers use Windows PowerShell 5.1's built-in security/service
+	// cmdlets, so load their OS modules instead of inherited/custom modules.
+	for _, env := range os.Environ() {
+		key, _, _ := strings.Cut(env, "=")
+		if !strings.EqualFold(key, "PSModulePath") {
+			cmd.Env = append(cmd.Env, env)
+		}
+	}
+	cmd.Env = append(cmd.Env, "PSModulePath="+filepath.Join(home, "Modules"))
+	return cmd
+}
+
+func ps(ctx context.Context, script string) error {
+	cmd := powershellCommand(ctx, "$ErrorActionPreference='Stop'; "+script)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("Windows update: %w: %s", err, out)
@@ -63,8 +79,7 @@ func installedSignature() *SigningInfo {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	script := "[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); $s=Get-AuthenticodeSignature -LiteralPath " + quotePS(exe) + "; $publisher=''; if ($s.SignerCertificate) {$publisher=$s.SignerCertificate.Subject}; @{status=[string]$s.Status;publisher=$publisher;timestamped=($null -ne $s.TimeStamperCertificate)} | ConvertTo-Json -Compress"
-	cmd := exec.CommandContext(ctx, filepath.Join(os.Getenv("SystemRoot"), "System32", "WindowsPowerShell", "v1.0", "powershell.exe"), "-NoProfile", "-NonInteractive", "-Command", script)
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	cmd := powershellCommand(ctx, script)
 	b, err := cmd.Output()
 	if err != nil {
 		return &SigningInfo{Status: "Unknown"}
