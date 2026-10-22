@@ -108,8 +108,8 @@ func TestDockerDaemonUpdate(t *testing.T) {
 			if healthy && current.Image != img.ID {
 				t.Fatal("did not start the new image")
 			}
-			if !healthy && current.ID != old.ID {
-				t.Fatal("did not restore previous container")
+			if !healthy && current.Image != old.Image {
+				t.Fatal("did not restore previous image")
 			}
 			before, after := old.NetworkSettings.Ports["51821/tcp"], current.NetworkSettings.Ports["51821/tcp"]
 			if len(before) != 1 || len(after) != 1 || before[0] != after[0] {

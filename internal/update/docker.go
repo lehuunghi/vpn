@@ -319,6 +319,7 @@ func applyContainer(ctx context.Context, d *dockerAPI, p dockerPlan) (result err
 	if err != nil {
 		return err
 	}
+	portsPinned := !bytes.Equal(host["PortBindings"], old.HostConfig["PortBindings"])
 	var labels map[string]string
 	_ = json.Unmarshal(config["Labels"], &labels)
 	if labels == nil {
@@ -355,17 +356,24 @@ func applyContainer(ctx context.Context, d *dockerAPI, p dockerPlan) (result err
 		if rollbackErr == nil && backupReady {
 			rollbackErr = restoreDatabase(p.DBPath, filepath.Join(dir, "backup", "vpn20.db"))
 		}
-		if rollbackErr == nil && renamed {
-			rollbackErr = d.call(rollbackCtx, "POST", "/containers/"+old.ID+"/rename?name="+url.QueryEscape(p.Name), nil, nil)
-		}
-		if rollbackErr == nil {
-			rollbackErr = d.call(rollbackCtx, "POST", "/containers/"+old.ID+"/update", map[string]any{"RestartPolicy": policy}, nil)
-		}
-		if rollbackErr == nil && stopped {
-			rollbackErr = d.call(rollbackCtx, "POST", "/containers/"+old.ID+"/start", nil, nil)
-		}
-		if rollbackErr == nil && stopped {
-			rollbackErr = waitContainer(rollbackCtx, d, old.ID, old.Image)
+		if rollbackErr == nil && stopped && portsPinned {
+			// Restarting the original container would ask Docker to allocate
+			// random ports again. Recreate its exact old image/config with the
+			// previous effective ports, then check health before removing it.
+			rollbackErr = recreatePreviousContainer(rollbackCtx, d, old, p, renamed)
+		} else {
+			if rollbackErr == nil && renamed {
+				rollbackErr = d.call(rollbackCtx, "POST", "/containers/"+old.ID+"/rename?name="+url.QueryEscape(p.Name), nil, nil)
+			}
+			if rollbackErr == nil {
+				rollbackErr = d.call(rollbackCtx, "POST", "/containers/"+old.ID+"/update", map[string]any{"RestartPolicy": policy}, nil)
+			}
+			if rollbackErr == nil && stopped {
+				rollbackErr = d.call(rollbackCtx, "POST", "/containers/"+old.ID+"/start", nil, nil)
+			}
+			if rollbackErr == nil && stopped {
+				rollbackErr = waitContainer(rollbackCtx, d, old.ID, old.Image)
+			}
 		}
 		if rollbackErr != nil {
 			result = fmt.Errorf("%v; rollback failed: %v; previous container: %s", result, rollbackErr, old.ID)
@@ -427,6 +435,33 @@ func applyContainer(ctx context.Context, d *dockerAPI, p dockerPlan) (result err
 		p.Job.Message += " Không xóa được container cũ đã dừng: " + cleanupErr.Error()
 	}
 	return writeJob(root, p.Job)
+}
+
+func recreatePreviousContainer(ctx context.Context, d *dockerAPI, old containerInfo, p dockerPlan, renamed bool) error {
+	config, host, network, err := replacementConfig(old, old.Image)
+	if err != nil {
+		return err
+	}
+	if !renamed {
+		if err = d.call(ctx, "POST", "/containers/"+old.ID+"/rename?name="+url.QueryEscape(p.Name+"-before-"+p.Job.ID[:8]), nil, nil); err != nil {
+			return err
+		}
+	}
+	config["HostConfig"] = mustJSON(host)
+	config["NetworkingConfig"] = mustJSON(network)
+	var created struct {
+		ID string `json:"Id"`
+	}
+	if err = d.call(ctx, "POST", "/containers/create?name="+url.QueryEscape(p.Name), config, &created); err != nil {
+		return err
+	}
+	if err = d.call(ctx, "POST", "/containers/"+created.ID+"/start", nil, nil); err != nil {
+		return err
+	}
+	if err = waitContainer(ctx, d, created.ID, old.Image); err != nil {
+		return fmt.Errorf("restored container %s: %w", created.ID, err)
+	}
+	return d.call(ctx, "DELETE", "/containers/"+old.ID+"?v=0", nil, nil)
 }
 
 func mustJSON(v any) json.RawMessage { b, _ := json.Marshal(v); return b }
