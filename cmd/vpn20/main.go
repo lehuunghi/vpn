@@ -102,6 +102,7 @@ func main() {
 const usage = `usage: vpn20 [serve | reset-password <user> | version]
 
 Configuration is read from VPN20_* environment variables; see the README.
+Windows: vpn20.exe enable-lan enables LAN administration and restarts the service.
 `
 
 func newLogger(cfg *config.Config) *slog.Logger {

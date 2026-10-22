@@ -1,17 +1,26 @@
-# Relay uses ordinary host sockets and only needs the WireGuard UDP listener.
+# The admin interface is reachable from the LAN without opening it to the WAN.
+function Add-VPN20AdminFirewall {
+    param([int]$AdminPort)
+    if ($AdminPort -gt 0) {
+        $null = New-NetFirewallRule -Name 'VPN20-Admin-LAN' -DisplayName 'VPN20 administration (LAN)' -Group 'VPN20' -Direction Inbound -Action Allow -Protocol TCP -LocalPort $AdminPort -RemoteAddress LocalSubnet -Profile Any
+    }
+}
+
+# Relay uses ordinary host sockets and needs no host NAT or forwarding.
 function Set-VPN20RelayNetwork {
-    param([int]$Port, [string]$Tunnel, [string]$StatePath)
+    param([int]$Port, [string]$Tunnel, [string]$StatePath, [int]$AdminPort = 0)
     # Restore forwarding settings and remove VPN20's NAT left by a previous
     # native installation. Never touch NATs or firewall groups owned by others.
     Remove-VPN20Network -StatePath $StatePath
     $null = New-NetFirewallRule -Name 'VPN20-WireGuard' -DisplayName 'VPN20 WireGuard UDP' -Group 'VPN20' -Direction Inbound -Action Allow -Protocol UDP -LocalPort $Port -Profile Any
     $null = New-NetFirewallRule -Name 'VPN20-Tunnel' -DisplayName 'VPN20 relay host traffic' -Group 'VPN20' -Direction Inbound -Action Allow -InterfaceAlias $Tunnel -Profile Any
+    Add-VPN20AdminFirewall -AdminPort $AdminPort
 }
 
 # Native routing and firewall rules are independent of optional Internet NAT.
 function Set-VPN20Network {
     param([string]$Tunnel, [string]$Uplink, [string]$Subnet, [int]$Port, [string]$StatePath,
-        [ValidateSet('auto','routed','nat')][string]$Mode = 'auto', [switch]$IPv6)
+        [ValidateSet('auto','routed','nat')][string]$Mode = 'auto', [switch]$IPv6, [int]$AdminPort = 0)
     $states = @()
     if (Test-Path -LiteralPath $StatePath) {
         $snapshot = Get-Content -Raw -LiteralPath $StatePath | ConvertFrom-Json
@@ -35,6 +44,7 @@ function Set-VPN20Network {
     Get-NetFirewallRule -Group 'VPN20' -ErrorAction SilentlyContinue | Remove-NetFirewallRule
     $null = New-NetFirewallRule -Name 'VPN20-WireGuard' -DisplayName 'VPN20 WireGuard UDP' -Group 'VPN20' -Direction Inbound -Action Allow -Protocol UDP -LocalPort $Port -Profile Any
     $null = New-NetFirewallRule -Name 'VPN20-Tunnel' -DisplayName 'VPN20 tunnel traffic' -Group 'VPN20' -Direction Inbound -Action Allow -InterfaceAlias $Tunnel -Profile Any
+    Add-VPN20AdminFirewall -AdminPort $AdminPort
     $result = [pscustomobject]@{Mode='routed'; Warning='VPN ngang hang dang hoat dong. Truy cap Internet qua may chu chua duoc bat.'}
     if ($Mode -eq 'routed') {
         # A previous crash may have left our own NAT behind. Other NATs are untouched.

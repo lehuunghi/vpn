@@ -16,6 +16,9 @@ type Rules struct {
 	Egress string
 	// ListenPort is the UDP port to accept WireGuard traffic on.
 	ListenPort int
+	// AdminListen opens the Windows admin TCP port to the local subnet when
+	// the listener is reachable beyond loopback. It does not open WAN access.
+	AdminListen string
 	// Subnets are the tunnel networks to masquerade (v4 and/or v6).
 	Subnets []netip.Prefix
 	// PeerIsolation drops traffic between peers when true.

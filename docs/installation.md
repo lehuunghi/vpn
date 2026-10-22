@@ -25,11 +25,14 @@ Windows có máy chủ RDP. Chưa kiểm thử trực tiếp mọi edition/thi�
 
 1. Đặt IP LAN cố định hoặc DHCP reservation cho máy chủ.
 2. Chọn IP công khai/tên miền, ví dụ `vpn.example.com`; tên miền phải trỏ
-   đúng về mạng máy chủ. VPN20 không tự đăng ký DNS hoặc cấp IP công khai.
+   đúng về mạng máy chủ. Có thể chọn subdomain và tự đồng bộ Cloudflare DNS
+   khi đã cấu hình domain/token; VPN20 không cấp IP công khai. Xem
+   [hướng dẫn LAN, domain và Tunnel](public-access.md).
 3. Mở **UDP 51820** trên firewall của máy/nhà cung cấp VPS. Nếu sau router,
    chuyển tiếp UDP 51820 về IP LAN máy chủ; nhiều lớp NAT cần chuyển tiếp từng
    lớp. CGNAT cần IP công khai hoặc một đường chuyển tiếp UDP phù hợp.
-4. Cổng quản trị mặc định **TCP 51821** chỉ nên mở trên localhost. Cổng HTTPS
+4. Cổng quản trị mặc định **TCP 51821** dùng trên LAN; bản cài Windows mới
+   tự giới hạn firewall theo LocalSubnet. Cổng HTTPS
    qua reverse proxy thường dùng TCP 443. Không chuyển tiếp cổng RDP 3389.
 5. Tránh trùng subnet VPN `10.8.0.0/24` với LAN máy chủ và LAN các client.
    Nếu đổi subnet, dừng dịch vụ trước, sửa cấu hình rồi cấp lại `.conf`.
@@ -63,7 +66,8 @@ Get-AuthenticodeSignature .\VPN20-<version>-windows-x64-setup.exe |
 .\VPN20-<version>-windows-x64-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-
 ```
 
-4. Mở shortcut VPN20 hoặc <http://127.0.0.1:51821>. Tạo tài khoản quản trị
+4. Mở shortcut VPN20 hoặc <http://127.0.0.1:51821> trên máy chủ; từ máy khác
+   trong LAN mở `http://IP-LAN-máy-chủ:51821`. Tạo tài khoản quản trị
    đầu tiên, đặt endpoint công khai, tạo thiết bị, tải `.conf`/quét QR.
 5. Dịch vụ, dữ liệu và chẩn đoán:
 
@@ -82,8 +86,9 @@ rồi chạy lại. Xem [cấu hình Windows](windows.md#cấu-hình-và-dữ-li
 
 Mặc định **relay** cho phép TCP/UDP/ping ra LAN bằng IP máy chủ, không cần
 WinNAT hoặc thêm tuyến VPN trên router. Trong Cài đặt, đặt AllowedIPs thành
-`10.8.0.0/24, 192.168.1.0/24` để đến LAN ví dụ `192.168.1.0/24`, hoặc chọn
-**Toàn bộ lưu lượng qua VPN**. Sau thay đổi định tuyến/DNS, tải lại `.conf`
+`10.8.0.0/24, 192.168.1.0/24` để đến LAN ví dụ `192.168.1.0/24`, hoặc nhập
+`0.0.0.0/0, ::/0` và DNS phù hợp để đưa toàn bộ lưu lượng qua VPN.
+Sau thay đổi định tuyến/DNS, tải lại `.conf`
 trên các client đã cài. Ping/RDP giữa peer cần tắt cô lập và cho phép dịch vụ
 trên máy đích; có script tải ngay trong trang thiết bị. Xem [hướng dẫn RDP](windows.md#ping-và-remote-desktop-giữa-các-máy).
 
@@ -149,11 +154,11 @@ sudoedit /etc/vpn20/vpn20.env
 sudo systemctl restart vpn20
 ```
 
-Cấu hình ví dụ; thay endpoint và chỉ mở quản trị ra mạng khi đã thiết lập HTTPS:
+Cấu hình ví dụ cho LAN; dùng HTTPS/proxy khi mở quản trị qua Internet:
 
 ```ini
 VPN20_DATA_DIR=/var/lib/vpn20
-VPN20_HTTP_LISTEN=127.0.0.1:51821
+VPN20_HTTP_LISTEN=0.0.0.0:51821
 VPN20_ENDPOINT=vpn.example.com
 VPN20_PORT=51820
 VPN20_SUBNET=10.8.0.0/24
@@ -161,7 +166,8 @@ VPN20_BACKEND=auto
 VPN20_UPDATE_MODE=systemd
 ```
 
-Truy cập quản trị từ máy khác qua SSH tunnel:
+Mở `http://IP-LAN-máy-chủ:51821`; cho phép TCP 51821 từ đúng subnet LAN trong
+firewall host. Có thể giữ listener `127.0.0.1` và dùng SSH tunnel:
 
 ```sh
 ssh -L 51821:127.0.0.1:51821 user@server
@@ -197,7 +203,8 @@ thành công của main; dùng tag phiên bản/digest khi muốn ghim một b�
 Package GHCR phải public để máy không có tài khoản registry tải được. Xem
 [quy trình GHCR](GHCR.md) nếu gặp denied/private hoặc cần tự build.
 
-Compose bridge ánh xạ UDP 51820 và TCP 51821 trên localhost. Volume `vpn20-data`
+Compose bridge ánh xạ UDP 51820 và TCP 51821 trên host. Đặt `VPN20_ADMIN_BIND`
+trong `.env` để chọn IP LAN cụ thể hoặc `127.0.0.1`. Volume `vpn20-data`
 giữ `/data`; tên đầy đủ có thể kèm tiền tố project Compose. Không chạy
 `docker compose down -v` nếu muốn giữ thiết bị, khóa và tài khoản.
 
@@ -335,6 +342,10 @@ thử nghiệm/quản trị nội bộ. Trình duyệt có thể cảnh báo cho
 được phân phối đúng theo chính sách của bạn; không cần vô hiệu hóa kiểm tra TLS.
 
 ## Cập nhật từ giao diện quản trị
+
+Subdomain Cloudflare, HTTPS và truy cập khi có CGNAT được hướng dẫn riêng
+tại [LAN, subdomain và Internet](public-access.md), kèm file Compose cho
+DNS và Cloudflare Tunnel.
 
 Đăng nhập bằng **admin** → **Cài đặt** → **Phiên bản và cập nhật**. Có thể bấm
 **Kiểm tra phiên bản** để xem thông tin, hoặc bấm thẳng **Cập nhật phiên bản

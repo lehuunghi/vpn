@@ -1,0 +1,17 @@
+# Optional HTTPS administration through Cloudflare Tunnel, including CGNAT.
+# Configure the public hostname's origin as http://vpn20:51821 in Cloudflare.
+# Use a different hostname from the DNS-only WireGuard endpoint.
+services:
+  vpn20:
+    environment:
+      VPN20_SECURE_COOKIES: "true"
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: ["tunnel", "--no-autoupdate", "run", "--token-file", "/run/secrets/cloudflare_tunnel_token"]
+    secrets:
+      - cloudflare_tunnel_token
+
+secrets:
+  cloudflare_tunnel_token:
+    file: ${VPN20_CLOUDFLARE_TUNNEL_TOKEN_PATH:-./secrets/cloudflare-tunnel-token.txt}

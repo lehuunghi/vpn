@@ -79,6 +79,8 @@ func platformCommand(args []string) (bool, error) {
 	switch args[0] {
 	case "service":
 		return true, svc.Run(serviceName, &windowsService{})
+	case "enable-lan":
+		return true, enableLAN()
 	case "install-service", "uninstall-service", "stop-service":
 		err := manageService(args[0])
 		if args[0] == "install-service" {
@@ -87,6 +89,73 @@ func platformCommand(args []string) (bool, error) {
 		return true, err
 	}
 	return false, nil
+}
+
+// Existing installations keep their explicit listener during upgrades. This
+// administrator command opts them into LAN access without losing other keys.
+func enableLAN() error {
+	if !windows.GetCurrentProcessToken().IsElevated() {
+		return errors.New("run this command as Administrator")
+	}
+	cfg, err := config.FromEnv()
+	if err != nil {
+		return err
+	}
+	_, port, err := net.SplitHostPort(cfg.HTTP)
+	if err != nil {
+		return err
+	}
+	address := net.JoinHostPort("0.0.0.0", port)
+	path := configPath()
+	old, err := os.ReadFile(path)
+	missing := errors.Is(err, os.ErrNotExist)
+	if err != nil && !missing {
+		return err
+	}
+	var settings map[string]string
+	if !missing {
+		if err = json.Unmarshal(old, &settings); err != nil {
+			return err
+		}
+	}
+	if settings == nil {
+		settings = map[string]string{}
+	}
+	settings["VPN20_HTTP_LISTEN"] = address
+	data, err := json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err = os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		return err
+	}
+	if err = os.WriteFile(path+".lan.tmp", data, 0600); err != nil {
+		return err
+	}
+	if err = os.Rename(path+".lan.tmp", path); err != nil {
+		_ = os.Remove(path + ".lan.tmp")
+		return err
+	}
+	oldEnv, hadEnv := os.LookupEnv("VPN20_HTTP_LISTEN")
+	_ = os.Setenv("VPN20_HTTP_LISTEN", address)
+	if err = manageService("install-service"); err != nil {
+		if missing {
+			_ = os.Remove(path)
+		} else if e := os.WriteFile(path, old, 0600); e != nil {
+			return fmt.Errorf("enable LAN failed: %v; could not restore config: %w", err, e)
+		}
+		if hadEnv {
+			_ = os.Setenv("VPN20_HTTP_LISTEN", oldEnv)
+		} else {
+			_ = os.Unsetenv("VPN20_HTTP_LISTEN")
+		}
+		if recovery := manageService("install-service"); recovery != nil {
+			return fmt.Errorf("enable LAN failed: %v; previous service could not restart: %w", err, recovery)
+		}
+		return fmt.Errorf("enable LAN failed; previous configuration restored: %w", err)
+	}
+	fmt.Printf("LAN administration enabled on TCP %s. Open http://<server-LAN-IP>:%s (https if configured). Windows Firewall allows LocalSubnet.\n", port, port)
+	return nil
 }
 
 // A hidden installer process has no visible stderr. Persist its actual error

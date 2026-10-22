@@ -161,6 +161,8 @@ const auditActions: Record<string, string> = {
   "peer.keys_rotated": "Thay khóa thiết bị",
   "peer.config_viewed": "Xem cấu hình thiết bị",
   "settings.updated": "Cập nhật cài đặt",
+  "public_access.saved": "Cập nhật subdomain",
+  "public_access.deleted": "Gỡ subdomain",
 	"system.update": "Cập nhật phiên bản chương trình",
 };
 

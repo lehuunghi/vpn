@@ -1,17 +1,15 @@
-# VPN20 1.1.0
+# VPN20 1.1.1
 
-- Thêm relay TCP/UDP và ICMP echo IPv4/IPv6, dùng địa chỉ mạng máy chủ khi ra LAN/Internet, không cần WinNAT hoặc thêm tuyến VPN trên router LAN.
-- Giữ adapter VPN Wintun thật để máy chủ chủ động ping/kết nối các thiết bị và cung cấp dịch vụ trên IP VPN.
-- Cô lập peer và TCP MSS hoạt động trong relay; khóa/xóa/hết hạn peer đóng các phiên relay.
-- Thêm bộ cài và ZIP x64 và x86; yêu cầu Windows 10 1607+/11 hoặc Server 2016+.
-- Giữ WireGuardNT routed/nat cho nhu cầu định tuyến riêng, giữ UI/API, tài khoản/2FA, thiết bị/QR/cấu hình, thống kê, thời hạn và tự chạy dịch vụ.
-- Thêm lựa chọn toàn bộ lưu lượng qua VPN trong giao diện.
+- Đơn giản hóa AllowedIPs: bỏ hai nút chọn tuyến và các đoạn mô tả cũ trong Cài đặt.
+- Cài mới Windows/Linux và Compose bridge cho phép truy cập quản trị bằng IP LAN. Windows tự mở đúng cổng TCP với phạm vi LocalSubnet.
+- Thêm `vpn20.exe enable-lan` cho bản Windows đã cài: giữ cổng và dữ liệu, khởi động lại dịch vụ, khôi phục cấu hình nếu lỗi. Nâng cấp giữ listener đã cấu hình.
+- Thêm chọn subdomain Cloudflare trong quản trị, tạo bản ghi A/DNS-only, nhận IPv4 công khai tự động hoặc nhập tay, đồng bộ DDNS mỗi 5 phút và dùng tên làm endpoint VPN nếu được chọn.
+- API token nằm trên máy chủ/file secret, không trả về trình duyệt. Không ghi đè bản ghi DNS có sẵn; chỉ sửa/xóa bản ghi VPN20 của máy đó.
+- Thêm hướng dẫn LAN, firewall, Cloudflare DNS, HTTPS/Caddy và Tunnel cho CGNAT; kèm Compose override cho DNS và Tunnel. Tunnel public hostname chỉ dùng cho web quản trị, không thay endpoint UDP WireGuard.
+- Giữ relay TCP/UDP/ping IPv4/IPv6, TCP MSS, tài khoản/2FA, thiết bị/QR/cấu hình, thống kê và nút cập nhật toàn bộ từ 1.1.0.
 
-- Thêm nút cập nhật đầy đủ trong quản trị, kiểm tra SHA-256 từ GitHub, sao lưu và phục hồi khi lỗi. Windows nhận bộ cài chưa ký nếu quản trị viên không ghim chứng chỉ.
-- Thêm gói Linux/systemd, cập nhật Docker qua cấu hình socket riêng và hướng dẫn cài đặt/HTTPS chi tiết.
-- Chữ ký ứng dụng/bộ cài là tùy chọn; bản này phát hành không ký mã. Driver Wintun/WireGuardNT vẫn có chữ ký chính hãng.
-- Kèm gói Linux amd64/arm64 cho systemd và hướng dẫn Docker/Compose, HTTPS, sao lưu và cập nhật.
+Tải bộ cài x64 cho Windows Intel/AMD 64-bit hoặc x86 cho Windows 32-bit. Không cung cấp Windows ARM64. Gói Linux amd64/arm64 và Docker tiếp tục được hỗ trợ.
 
-Tải `windows-x64-setup.exe` cho Windows Intel/AMD 64-bit hoặc `windows-x86-setup.exe` cho Windows 32-bit; các gói ZIP dành cho quản trị viên triển khai thủ công. Đối chiếu `SHA256SUMS.txt` trước khi chạy. Windows có thể hiển thị Unknown publisher vì ứng dụng/bộ cài chưa ký; đây không phải chứng chỉ nhà phát hành được tin cậy.
+Bản này không ký mã ứng dụng/bộ cài; Windows có thể hiện Unknown publisher. Driver Wintun/WireGuardNT vẫn có chữ ký chính hãng. Đối chiếu SHA-256 trong Assets; không có chứng chỉ nhà phát hành công cộng giả lập.
 
-Xem [hướng dẫn cài đặt](https://github.com/lehuunghi/vpn/blob/main/docs/installation.md). Relay không chuyển tiếp GRE/ESP/multicast hoặc traceroute ra ngoài. Chưa xác minh trực tiếp Windows 10 Home, Windows 32-bit thật, reboot toàn máy hoặc đăng nhập RDP đồ họa qua router thực tế.
+Hướng dẫn: [cài đặt](https://github.com/lehuunghi/vpn/blob/main/docs/installation.md) · [LAN và domain](https://github.com/lehuunghi/vpn/blob/main/docs/public-access.md). Cấu hình domain/Zone ID/token và router/HTTPS thực tế do chủ máy thực hiện; bản ghi DNS thành công không xác nhận cổng Internet đã mở.

@@ -20,6 +20,7 @@ import (
 type Config struct {
 	UpdateMode, UpdateDockerSocket, UpdateDockerContainer, UpdateCertificateSHA1 string
 	UpdatePrerelease                                                             bool
+	CloudflareDomain, CloudflareZoneID, CloudflareToken                          string
 	WindowsNetworkMode                                                           string
 	DataDir                                                                      string
 	DBPath                                                                       string
@@ -134,7 +135,6 @@ func FromEnv() (*Config, error) {
 	dataDefault, httpDefault := "/data", ":51821"
 	if runtime.GOOS == "windows" {
 		dataDefault = filepath.Join(env("ProgramData", `C:\ProgramData`), "VPN20")
-		httpDefault = "127.0.0.1:51821"
 	}
 	c.DataDir = env("VPN20_DATA_DIR", dataDefault)
 	c.DBPath = env("VPN20_DB", filepath.Join(c.DataDir, "vpn20.db"))
@@ -197,6 +197,18 @@ func FromEnv() (*Config, error) {
 		c.TrustedProxies = append(c.TrustedProxies, pfx)
 	}
 	c.MetricsToken = env("VPN20_METRICS_TOKEN", "")
+	c.CloudflareDomain = strings.ToLower(strings.TrimSuffix(env("VPN20_CLOUDFLARE_DOMAIN", ""), "."))
+	c.CloudflareZoneID = env("VPN20_CLOUDFLARE_ZONE_ID", "")
+	c.CloudflareToken = env("VPN20_CLOUDFLARE_API_TOKEN", "")
+	if tokenFile := env("VPN20_CLOUDFLARE_API_TOKEN_FILE", ""); tokenFile != "" {
+		if c.CloudflareToken != "" {
+			errs = append(errs, errors.New("set only one of VPN20_CLOUDFLARE_API_TOKEN or VPN20_CLOUDFLARE_API_TOKEN_FILE"))
+		} else if raw, e := os.ReadFile(tokenFile); e != nil {
+			errs = append(errs, errors.New("cannot read VPN20_CLOUDFLARE_API_TOKEN_FILE"))
+		} else {
+			c.CloudflareToken = strings.TrimSpace(string(raw))
+		}
+	}
 	if c.SessionIdle, err = envDuration("VPN20_SESSION_IDLE", 12*time.Hour); err != nil {
 		errs = append(errs, err)
 	}

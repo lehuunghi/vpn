@@ -23,8 +23,10 @@ Bản Windows vẫn là prerelease; cần kiểm tra trên máy đích trước 
 5. Thêm thiết bị, quét QR bằng ứng dụng WireGuard hoặc tải cấu hình `.conf`.
    Kiểm tra bắt tay, truy cập mạng và lưu lượng trên bảng điều khiển.
 
-Quản trị mặc định chỉ mở trên chính máy Windows. Cổng quản trị không được tự
-mở ra Internet. Có thể bật HTTPS và đổi địa chỉ lắng nghe trong cấu hình.
+Từ 1.1.1, bản cài mới cho phép quản trị bằng `http://IP-LAN:51821` trong cùng
+subnet; Windows Firewall tự mở TCP đúng cổng với phạm vi LocalSubnet. Bản
+nâng cấp giữ địa chỉ đã cấu hình. Chạy `vpn20.exe enable-lan` bằng Administrator
+để bật LAN cho bản cũ. Xem [LAN, subdomain và Internet](public-access.md).
 
 ## Yêu cầu và khác biệt nền tảng
 
@@ -62,14 +64,15 @@ mở ra Internet. Có thể bật HTTPS và đổi địa chỉ lắng nghe tron
 Mặc định `VPN20_WINDOWS_NETWORK_MODE=auto` và `VPN20_BACKEND=auto` chọn relay.
 `relay` chọn tường minh cùng đường truyền; `userspace` cũng dùng relay trên
 Windows. Không cần bật IP forwarding trên card LAN, RRAS, ICS hoặc WinNAT.
-Relay chỉ mở cổng UDP WireGuard và cho phép lưu lượng vào adapter VPN;
-không tự mở cổng quản trị ra mạng. Dịch vụ chỉ lắng nghe localhost vẫn riêng tư.
+Relay mở cổng UDP WireGuard và cho phép lưu lượng vào adapter VPN. Listener
+quản trị mở ra mạng có thêm quy tắc TCP giới hạn LocalSubnet; listener
+localhost vẫn giữ phạm vi máy chủ.
 Chế độ này cần quyền quản trị để tạo Wintun; DLL chính thức đã được bộ cài kèm.
 
 Để truy cập LAN, ví dụ LAN máy chủ là `192.168.1.0/24`, đặt AllowedIPs của
 client thành `10.8.0.0/24, 192.168.1.0/24` (thêm subnet IPv6 nếu dùng), tải lại
-cấu hình và kết nối. Hoặc bấm **Toàn bộ lưu lượng qua VPN** trong Cài đặt để
-đưa cả Internet qua máy chủ. Cấu hình Windows mới vẫn mặc định chỉ tuyến VPN
+cấu hình và kết nối. Đặt `0.0.0.0/0, ::/0` trong AllowedIPs và DNS phù hợp để
+đưa cả Internet qua máy chủ (IPv6 cần upstream IPv6). Cấu hình Windows mới vẫn mặc định chỉ tuyến VPN
 và giữ DNS/Internet hiện tại của client; nâng cấp giữ cài đặt đã có.
 Không cần tuyến VPN trên router LAN cho các kết nối TCP/UDP/ping do client mở.
 Máy LAN cần cho phép dịch vụ từ IP LAN máy chủ. Máy ngoài VPN muốn chủ động
@@ -100,10 +103,10 @@ Lỗi driver/firewall hoặc cô lập vẫn làm khởi động thất bại.
 
 ## Ping và Remote Desktop giữa các máy
 
-1. Nâng cấp máy chủ bằng bộ cài mới. Trong **Cài đặt**, bấm **Chỉ mạng VPN ·
-   cho phép ping / remote**, rồi **Lưu**. Nút này đặt AllowedIPs bằng subnet
-   VPN, bỏ DNS riêng và tắt cô lập. Cài mới trên Windows mặc định dùng các
-   tuyến VPN này. Dữ liệu cũ được giữ nguyên khi nâng cấp.
+1. Nâng cấp máy chủ bằng bộ cài mới. Trong **Cài đặt**, đặt **AllowedIPs**
+   bằng subnet VPN, ví dụ `10.8.0.0/24`, để DNS trống nếu muốn giữ DNS thiết
+   bị, tắt **Cô lập thiết bị** rồi lưu. Cài mới trên Windows mặc định dùng
+   tuyến VPN; dữ liệu cũ được giữ nguyên khi nâng cấp.
 2. Kiểm tra từng thiết bị: bỏ giá trị DNS/AllowedIPs riêng cũ nếu cần. Tải lại
    `.conf`, nhập vào WireGuard và kết nối trên mỗi máy. Ví dụ AllowedIPs
    `10.8.0.0/24` cho phép đến tất cả IP trong subnet VPN; Internet vẫn đi qua
@@ -153,7 +156,7 @@ Ví dụ cấu hình sau khi dừng dịch vụ:
 ```json
 {
   "VPN20_BACKEND": "auto",
-  "VPN20_HTTP_LISTEN": "127.0.0.1:51821",
+  "VPN20_HTTP_LISTEN": "0.0.0.0:51821",
   "VPN20_INTERFACE": "wg0",
   "VPN20_PORT": "51820",
   "VPN20_SUBNET": "10.8.0.0/24",

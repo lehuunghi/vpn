@@ -50,7 +50,7 @@ services:
       # VPN20_METRICS_TOKEN: change-me
     ports:
       - "51820:51820/udp"
-      - "127.0.0.1:51821:51821/tcp"
+      - "${VPN20_ADMIN_BIND:-0.0.0.0}:51821:51821/tcp"
     volumes:
       - vpn20-data:/data
 

@@ -21,20 +21,22 @@ import (
 	"github.com/lehuunghi/vpn/internal/auth"
 	"github.com/lehuunghi/vpn/internal/config"
 	"github.com/lehuunghi/vpn/internal/engine"
+	"github.com/lehuunghi/vpn/internal/publicaccess"
 	"github.com/lehuunghi/vpn/internal/server/static"
 	"github.com/lehuunghi/vpn/internal/update"
 )
 
 // Server serves the API and UI.
 type Server struct {
-	cfg      *config.Config
-	eng      *engine.Engine
-	log      *slog.Logger
-	mux      *http.ServeMux
-	ipLimit  *auth.Limiter
-	usrLimit *auth.Limiter
-	http     *http.Server
-	updater  *update.Manager
+	cfg       *config.Config
+	eng       *engine.Engine
+	log       *slog.Logger
+	mux       *http.ServeMux
+	ipLimit   *auth.Limiter
+	usrLimit  *auth.Limiter
+	http      *http.Server
+	updater   *update.Manager
+	publicDNS *publicaccess.Manager
 }
 
 // New builds the router.
@@ -56,6 +58,7 @@ func New(cfg *config.Config, eng *engine.Engine, log *slog.Logger) *Server {
 		cert = filepath.Join(cfg.DataDir, "tls.crt")
 	}
 	s.updater = update.New(update.Options{Version: engine.Version, Mode: mode, DataDir: cfg.DataDir, DBPath: cfg.DBPath, HTTPURL: update.LocalURL(cfg.HTTP, cfg.TLSEnabled()), TLSCert: cert, DockerSocket: cfg.UpdateDockerSocket, DockerContainer: cfg.UpdateDockerContainer, CertificateThumbprint: cfg.UpdateCertificateSHA1, Prerelease: cfg.UpdatePrerelease})
+	s.publicDNS = publicaccess.New(publicaccess.Options{Domain: cfg.CloudflareDomain, ZoneID: cfg.CloudflareZoneID, Token: cfg.CloudflareToken}, eng.Store())
 	s.routes()
 	return s
 }
@@ -104,6 +107,10 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 		}
 	}()
 	s.log.Info("admin UI listening", "addr", ln.Addr().String(), "tls", tlsCfg != nil)
+	dnsContext, stopDNS := context.WithCancel(ctx)
+	dnsDone := make(chan struct{})
+	go func() { defer close(dnsDone); s.publicDNS.Run(dnsContext) }()
+	defer func() { stopDNS(); <-dnsDone }()
 	select {
 	case <-ctx.Done():
 		shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -153,6 +160,10 @@ func (s *Server) routes() {
 	m.Handle("GET /api/users", s.authed(s.handleUsers))
 
 	// Admin role required.
+	m.Handle("GET /api/public-access", s.admin(s.handlePublicAccess))
+	m.Handle("PUT /api/public-access", s.admin(s.handleSavePublicAccess))
+	m.Handle("POST /api/public-access/check", s.admin(s.handleCheckPublicAccess))
+	m.Handle("DELETE /api/public-access", s.admin(s.handleDeletePublicAccess))
 	m.Handle("GET /api/update", s.admin(s.handleUpdateStatus))
 	m.Handle("POST /api/update/check", s.admin(s.handleUpdateCheck))
 	m.Handle("POST /api/update", s.admin(s.handleUpdateStart))
