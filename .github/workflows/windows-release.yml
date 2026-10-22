@@ -9,6 +9,8 @@ on:
       - 'web/**'
       - 'go.*'
       - 'packaging/windows/**'
+      - 'packaging/linux/**'
+      - 'VERSION'
       - 'docs/windows.md'
       - '.github/workflows/windows-release.yml'
   workflow_dispatch:
@@ -39,6 +41,21 @@ jobs:
       - run: go vet ./...
       - run: go test -count=1 ./...
       - run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+      - name: Package Linux binaries for the same release
+        run: |
+          test "$(tr -d '\r\n' < VERSION)" = "$(tr -d '\r\n' < packaging/windows/VERSION)"
+          bash packaging/linux/build.sh amd64
+          bash packaging/linux/build.sh arm64
+      - name: Verify Linux installation, upgrade and rollback
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y nftables
+          sudo env "PATH=$PATH" GITHUB_ACTIONS=true GOTOOLCHAIN=local bash packaging/linux/smoke-install.sh dist/release/*-linux-amd64.tar.gz
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: vpn20-linux
+          path: dist/release/*
+          if-no-files-found: error
 
   windows:
     strategy:
@@ -66,7 +83,7 @@ jobs:
       - name: Build and verify relay, WireGuardNT, WinNAT and isolation
         shell: pwsh
         env:
-          VPN20_REQUIRE_SIGNING: ${{ github.ref == 'refs/heads/main' }}
+          VPN20_REQUIRE_SIGNING: 'false'
           VPN20_SIGN_PFX_BASE64: ${{ github.ref == 'refs/heads/main' && secrets.VPN20_SIGN_PFX_BASE64 || '' }}
           VPN20_SIGN_PFX_PASSWORD: ${{ github.ref == 'refs/heads/main' && secrets.VPN20_SIGN_PFX_PASSWORD || '' }}
         run: ./packaging/windows/build.ps1 -Architecture ${{ matrix.arch }}
@@ -110,7 +127,11 @@ jobs:
           pattern: vpn20-windows-windows-2022-*
           merge-multiple: true
           path: release
-      - name: Publish verified Windows installer
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: vpn20-linux
+          path: release
+      - name: Publish verified Windows and Linux packages
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -121,4 +142,6 @@ jobs:
             echo "Release $tag already exists. Bump packaging/windows/VERSION to publish another version."
             exit 0
           fi
-          gh release create "$tag" release/* --target "$GITHUB_SHA" --prerelease --title "VPN20 $version — Windows x64 and x86" --notes-file packaging/windows/release-notes.md
+          release_flags=(--latest)
+          if [[ "$version" == *-* ]]; then release_flags=(--prerelease); fi
+          gh release create "$tag" release/* --target "$GITHUB_SHA" "${release_flags[@]}" --title "VPN20 $version — Windows and Linux" --notes-file packaging/windows/release-notes.md

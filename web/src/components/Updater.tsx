@@ -36,7 +36,7 @@ export function Updater() {
     <div className="card-head"><h2>Phiên bản và cập nhật</h2><span className="mono">{status?.current || "Đang tải…"}</span></div>
     <div className="card-body stack">
       <p>Cập nhật toàn bộ chương trình và giao diện. Thiết bị, khóa VPN, tài khoản và cài đặt được giữ lại. Kết nối VPN sẽ gián đoạn ngắn khi khởi động lại.</p>
-      {status?.signing && <p className="hint">{status.signing.status === "Valid" ? `Chữ ký nhà phát hành hợp lệ: ${status.signing.publisher || "đã xác minh"}${status.signing.timestamped ? " · có dấu thời gian" : ""}.` : status.signing.status === "NotSigned" ? "Bản cài hiện tại chưa có chữ ký nhà phát hành. Cập nhật tự động chỉ nhận bộ cài được ký và tin cậy." : "Chưa xác minh được chữ ký nhà phát hành của bản cài hiện tại."}</p>}
+      {status?.signing && <p className="hint">{status.signing.status === "Valid" ? `Chữ ký nhà phát hành hợp lệ: ${status.signing.publisher || "đã xác minh"}${status.signing.timestamped ? " · có dấu thời gian" : ""}.` : status.signing.status === "NotSigned" ? "Bản cài hiện tại chưa có chữ ký nhà phát hành. Tệp cập nhật được đối chiếu SHA-256 từ GitHub." : "Chưa xác minh được chữ ký nhà phát hành của bản cài hiện tại."}</p>}
       {status?.latest && <div className="notice">Có phiên bản <strong>{status.latest.version}</strong>{status.latest.prerelease && " · bản thử nghiệm"}. <a href={status.latest.url} target="_blank" rel="noopener noreferrer">Xem bản phát hành</a></div>}
       {status?.checkedAt && !status.latest && <p className="muted">Bạn đang dùng phiên bản mới nhất phù hợp với máy này.</p>}
       {status?.reason && <div className="notice">{status.reason} <a href="https://github.com/lehuunghi/vpn/blob/main/docs/installation.md#cập-nhật-từ-giao-diện-quản-trị" target="_blank" rel="noopener noreferrer">Hướng dẫn bật cập nhật</a></div>}
@@ -47,7 +47,7 @@ export function Updater() {
         <button type="button" className="btn" disabled={busy || !status} onClick={check}><RefreshCw size={16} /> Kiểm tra phiên bản</button>
         <button type="button" className="btn primary" disabled={busy || !status?.supported} onClick={install}><ArrowUpCircle size={16} /> {status?.busy ? "Đang cập nhật…" : "Cập nhật phiên bản mới nhất"}</button>
       </div>
-      <p className="hint">Tự sao lưu trước khi cài và khôi phục khi bản mới không khởi động được. Windows chỉ chấp nhận bộ cài có chữ ký nhà phát hành và dấu thời gian hợp lệ.</p>
+      <p className="hint">Tự sao lưu trước khi cài và khôi phục khi bản mới không khởi động được. Gói tải về được xác minh SHA-256; nếu đã ghim chứng chỉ Windows thì bộ cài phải khớp chứng chỉ đó.</p>
     </div>
   </section>;
 }

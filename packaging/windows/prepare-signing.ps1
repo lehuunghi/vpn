@@ -14,7 +14,7 @@ if ($env:VPN20_SIGN_PFX_BASE64) {
 }
 if (!$env:VPN20_SIGN_CERTIFICATE_THUMBPRINT) {
     if ($Required) { throw 'Release signing is required. Configure a trusted code-signing certificate (VPN20_SIGN_PFX_BASE64/PASSWORD or VPN20_SIGN_CERTIFICATE_THUMBPRINT). No unsigned public installer will be published.' }
-    Write-Output 'Development build: application and installer are unsigned. Official Wintun/WireGuardNT drivers retain their publisher signatures.'
+    Write-Output 'Unsigned build: application and installer have no publisher signature. Official Wintun/WireGuardNT drivers retain their publisher signatures.'
     return
 }
 $cert = Get-Item ('Cert:\CurrentUser\My\' + $env:VPN20_SIGN_CERTIFICATE_THUMBPRINT)

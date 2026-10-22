@@ -42,7 +42,7 @@ Windows có máy chủ RDP. Chưa kiểm thử trực tiếp mọi edition/thi�
    mới nhất có gói phù hợp:
    - `VPN20-<version>-windows-x64-setup.exe`: Windows Intel/AMD 64-bit.
    - `VPN20-<version>-windows-x86-setup.exe`: Windows 32-bit.
-2. Kiểm tra checksum trong Assets và chữ ký trước khi chạy:
+2. Kiểm tra checksum trong Assets; có thể xem thêm trạng thái chữ ký:
 
 ```powershell
 Get-FileHash .\VPN20-<version>-windows-x64-setup.exe -Algorithm SHA256
@@ -50,11 +50,11 @@ Get-AuthenticodeSignature .\VPN20-<version>-windows-x64-setup.exe |
   Format-List Status,StatusMessage,SignerCertificate,TimeStamperCertificate
 ```
 
-   So sánh SHA-256 với `SHA256SUMS.txt`. Bản phát hành có ký phải hiện
-   `Status: Valid`, đúng nhà phát hành và có chứng chỉ dấu thời gian. Driver
-   Wintun/WireGuardNT có chữ ký riêng của nhà cung cấp driver. Gói thử nghiệm
-   trong Actions khi chưa cấu hình chứng chỉ không tương đương bộ cài có nhà
-   phát hành được tin cậy; trình cập nhật không tự cài gói thiếu chữ ký hợp lệ.
+   So sánh SHA-256 với `SHA256SUMS.txt`. Bản 1.1.0 không ký mã ứng dụng/bộ cài,
+   nên có thể hiện `NotSigned` hoặc Unknown publisher; không có chứng chỉ nhà
+   phát hành công cộng đi kèm. Driver Wintun/WireGuardNT vẫn có chữ ký chính
+   hãng riêng. Trình cập nhật nhận gói chưa ký từ release của dự án sau khi
+   kiểm tra digest GitHub; nếu đã ghim chứng chỉ thì vẫn bắt buộc khớp chữ ký.
 3. Chạy `.exe` bằng Administrator, làm theo cửa sổ cài đặt. Bộ cài thêm
    shortcut, driver, dịch vụ **VPN20** chạy dưới LocalSystem, tự chạy khi bật
    máy và tự khởi động lại khi lỗi. Server Core có thể cài im lặng:
@@ -260,8 +260,10 @@ trên GHCR cho tới khi workflow xuất bản thành công.
 
 `AppPublisher`/logo không tạo được nhà phát hành được tin cậy. Cần chứng chỉ
 **Code Signing** hợp lệ cùng khóa ký; chứng chỉ TLS website không thay thế được.
-Bản release chính thức ký SHA-256 và RFC 3161 timestamp cho `vpn20.exe`, Setup,
-Uninstall và các bản sao tạm do Inno Setup tạo. Không ký lại driver của nhà
+Bản 1.1.0 được phát hành không ký mã; không cần mua chứng chỉ để cài hoặc cập
+nhật. Windows có thể hiện Unknown publisher. Nếu sau này bật ký, quy trình ký
+SHA-256 và RFC 3161 timestamp cho `vpn20.exe`, Setup, Uninstall và các bản sao
+tạm do Inno Setup tạo. Không ký lại driver của nhà
 cung cấp. [Microsoft SignTool](https://learn.microsoft.com/en-us/windows/win32/seccrypto/signtool)
 và [Inno Setup SignTool](https://jrsoftware.org/ishelp/topic_setup_signtool.htm)
 mô tả cách xác minh chữ ký và chuỗi tin cậy.
@@ -271,9 +273,9 @@ Cấu hình ký trong GitHub Actions → Settings → Secrets and variables → 
 - `VPN20_SIGN_PFX_BASE64`: PFX của chứng chỉ ký mã **được phép xuất khóa**, mã hóa base64.
 - `VPN20_SIGN_PFX_PASSWORD`: mật khẩu PFX. Không commit PFX/khóa/mật khẩu vào repo.
 
-Workflow chỉ cấp hai secret này khi build `main`. Không có chứng chỉ thì CI
-nhánh thử nghiệm vẫn kiểm tra/build gói unsigned, nhưng main không phát hành
-bộ cài unsigned. Khi ký local hoặc trên runner/HSM riêng, cài khóa trong
+Workflow chỉ cấp hai secret này khi build `main`. Nếu không cấu hình chứng
+chỉ, CI vẫn kiểm tra, build và phát hành bộ cài unsigned. Khi ký local hoặc
+trên runner/HSM riêng, cài khóa trong
 `Cert:\CurrentUser\My`, đặt `VPN20_SIGN_CERTIFICATE_THUMBPRINT` rồi chạy build.
 Chứng chỉ CA yêu cầu khóa phần cứng/cloud phải dùng phương thức ký mà CA cho
 phép; không xuất khóa ra PFX nếu chứng chỉ/chính sách không cho phép. Có thể
@@ -288,9 +290,11 @@ $env:VPN20_SIGN_CERTIFICATE_THUMBPRINT = '<thumbprint-cua-chung-chi-ky-ma>'
 Có thể đặt `VPN20_SIGN_TIMESTAMP_URL` nếu dùng dịch vụ timestamp khác.
 `Get-AuthenticodeSignature` phải có `Valid` trên máy nhận mà không thêm một
 CA thử nghiệm tùy tiện. Chữ ký hợp lệ không đảm bảo SmartScreen luôn bỏ mọi
-cảnh báo vì SmartScreen còn xét uy tín tệp/nhà phát hành. Nút cập nhật Windows
-từ chối tệp chưa ký, chuỗi không tin cậy hoặc thiếu timestamp; có thể ghim
-thumbprint bằng `VPN20_UPDATE_CERT_SHA1` trong cấu hình máy chủ.
+cảnh báo vì SmartScreen còn xét uy tín tệp/nhà phát hành. Nút cập nhật luôn
+kiểm tra SHA-256 do API GitHub cung cấp trước khi chạy bộ cài. Không ghim chứng
+chỉ thì nhận tệp unsigned; nếu tệp có chữ ký thì chữ ký/chuỗi/timestamp phải
+hợp lệ. Đặt `VPN20_UPDATE_CERT_SHA1` để bắt buộc bộ cài có chữ ký từ đúng chứng
+chỉ được ghim, từ chối cả tệp unsigned.
 
 ### HTTPS có chuỗi chứng chỉ đầy đủ
 
@@ -338,7 +342,8 @@ mới nhất** để bắt đầu. Viewer không có quyền này. Trình duyệ
 tải hay lệnh thực thi; máy chủ chỉ dùng repo/image cố định của dự án.
 
 - Windows: dịch vụ cài bằng Setup, đủ quyền quản trị, release đúng x64/x86,
-  digest GitHub khớp, chữ ký Authenticode/timestamp hợp lệ.
+  digest GitHub khớp. Không bắt buộc chữ ký nếu chưa ghim chứng chỉ; có ghim thì
+  bắt buộc chữ ký Authenticode/timestamp hợp lệ và đúng thumbprint.
 - Linux: chương trình `/usr/local/bin/vpn20`, unit `vpn20.service`, root và
   systemd; tác vụ cập nhật chạy bằng transient unit để sống qua lúc dừng dịch vụ.
 - Docker: cần override socket ở trên, volume dữ liệu riêng và healthcheck.
@@ -358,7 +363,7 @@ Các biến cấu hình bổ sung:
 | --- | --- | --- |
 | `VPN20_UPDATE_MODE` | `auto` | `windows`, `systemd`, `docker`, hoặc `disabled` |
 | `VPN20_UPDATE_PRERELEASE` | `false` | Cho phép release thử nghiệm; bản hiện tại prerelease cũng được xét |
-| `VPN20_UPDATE_CERT_SHA1` | trống | Ghim thumbprint chứng chỉ ký mã Windows, không phải hash tệp |
+| `VPN20_UPDATE_CERT_SHA1` | trống | Trống: nhận gói unsigned có digest đúng; đặt thumbprint để bắt buộc ký mã từ chứng chỉ đó |
 | `VPN20_DOCKER_SOCKET` | `/var/run/docker.sock` | Socket Docker bên trong container |
 | `VPN20_UPDATE_CONTAINER` | hostname container | Tên/ID chính container cần thay; override chuẩn dùng `vpn20` |
 

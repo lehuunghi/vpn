@@ -35,7 +35,7 @@ jobs:
           if [ "$GITHUB_REF_TYPE" = tag ]; then
             version="${GITHUB_REF_NAME#v}"
           else
-            version="dev-${GITHUB_SHA::12}"
+            version="$(tr -d '\r\n' < VERSION)"
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
       - name: Image tags and labels

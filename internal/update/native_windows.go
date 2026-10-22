@@ -77,7 +77,13 @@ func installedSignature() *SigningInfo {
 }
 
 func verifyNativePayload(ctx context.Context, path, thumbprint string) error {
-	script := "$s=Get-AuthenticodeSignature -LiteralPath " + quotePS(path) + "; if ($s.Status -ne 'Valid') { throw ('Bộ cài chưa có chữ ký Authenticode được tin cậy: ' + $s.Status) }; if (!$s.TimeStamperCertificate) { throw 'Bộ cài thiếu dấu thời gian ký số' }"
+	// Both callers have already verified the GitHub asset's SHA-256 digest.
+	// Unsigned releases are supported unless the operator pins a certificate.
+	script := "$s=Get-AuthenticodeSignature -LiteralPath " + quotePS(path)
+	if thumbprint == "" {
+		script += "; if ($s.Status -eq 'NotSigned') { exit 0 }"
+	}
+	script += "; if ($s.Status -ne 'Valid') { throw ('Chữ ký Authenticode không hợp lệ: ' + $s.Status) }; if (!$s.TimeStamperCertificate) { throw 'Bộ cài thiếu dấu thời gian ký số' }"
 	if thumbprint != "" {
 		script += "; if ($s.SignerCertificate.Thumbprint -ne " + quotePS(thumbprint) + ") { throw 'Chứng chỉ nhà phát hành không khớp cấu hình' }"
 	}
