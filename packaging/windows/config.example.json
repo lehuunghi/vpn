@@ -4,5 +4,6 @@
   "VPN20_INTERFACE": "wg0",
   "VPN20_PORT": "51820",
   "VPN20_SUBNET": "10.8.0.0/24",
+  "VPN20_WINDOWS_NETWORK_MODE": "auto",
   "VPN20_LOG_LEVEL": "info"
 }

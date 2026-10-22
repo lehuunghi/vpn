@@ -25,13 +25,13 @@ import (
 
 // Server serves the API and UI.
 type Server struct {
-	cfg     *config.Config
-	eng     *engine.Engine
-	log     *slog.Logger
-	mux     *http.ServeMux
-	ipLimit *auth.Limiter
+	cfg      *config.Config
+	eng      *engine.Engine
+	log      *slog.Logger
+	mux      *http.ServeMux
+	ipLimit  *auth.Limiter
 	usrLimit *auth.Limiter
-	http    *http.Server
+	http     *http.Server
 }
 
 // New builds the router.
@@ -62,9 +62,9 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 		ReadTimeout:       30 * time.Second,
 		// No WriteTimeout: the SSE stream is long-lived. Handlers that
 		// matter bound themselves.
-		IdleTimeout: 120 * time.Second,
+		IdleTimeout:    120 * time.Second,
 		MaxHeaderBytes: 64 << 10,
-		ErrorLog:    slog.NewLogLogger(s.log.Handler(), slog.LevelWarn),
+		ErrorLog:       slog.NewLogLogger(s.log.Handler(), slog.LevelWarn),
 	}
 	var tlsCfg *tls.Config
 	if s.cfg.TLSEnabled() {
@@ -73,8 +73,8 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 			return err
 		}
 		tlsCfg = &tls.Config{
-			Certificates: []tls.Certificate{cert},
-			MinVersion:   tls.VersionTLS12,
+			Certificates:     []tls.Certificate{cert},
+			MinVersion:       tls.VersionTLS12,
 			CurvePreferences: []tls.CurveID{tls.X25519, tls.CurveP256},
 		}
 		s.http.TLSConfig = tlsCfg
@@ -127,6 +127,7 @@ func (s *Server) routes() {
 	m.Handle("POST /api/auth/sessions/revoke", s.authed(s.handleRevokeSessions))
 
 	m.Handle("GET /api/status", s.authed(s.handleStatus))
+	m.Handle("GET /api/windows/peer-access.ps1", s.authed(s.handleWindowsPeerAccess))
 	m.Handle("GET /api/events", s.authed(s.handleEvents))
 	m.Handle("GET /api/peers", s.authed(s.handlePeers))
 	m.Handle("GET /api/peers/{id}", s.authed(s.handlePeer))

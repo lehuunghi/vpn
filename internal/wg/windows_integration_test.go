@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -73,15 +74,25 @@ func TestWindowsNativeTunnel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rules := netcfg.Rules{Iface: "vpn20test", Egress: egress, ListenPort: port, Subnets: []netip.Prefix{netip.MustParsePrefix("10.254.250.0/24")}}
+	rules := netcfg.Rules{Iface: "vpn20test", WindowsMode: "routed", ListenPort: port, Subnets: []netip.Prefix{netip.MustParsePrefix("10.254.250.0/24")}}
 	t.Cleanup(func() {
 		if err := netcfg.Remove(context.Background(), ""); err != nil {
 			t.Error(err)
 		}
 	})
-	if err = netcfg.Apply(ctx, rules); err != nil {
-		t.Fatal(err)
+	apply := func() {
+		t.Helper()
+		err := netcfg.Apply(ctx, rules)
+		var notice *netcfg.NetworkNotice
+		if rules.WindowsMode == "routed" {
+			if !errors.As(err, &notice) || notice.Mode != "routed" {
+				t.Fatalf("expected working routed mode: %v", err)
+			}
+		} else if err != nil {
+			t.Fatal(err)
+		}
 	}
+	apply()
 
 	newClient := func(ip string) *memoryTUN {
 		priv, err := wg.GeneratePrivateKey()
@@ -138,15 +149,28 @@ func TestWindowsNativeTunnel(t *testing.T) {
 	if _, ok := waitPayload(c2, []byte("peer-open"), 5*time.Second); !ok {
 		t.Fatal("peer forwarding failed")
 	}
-	rules.PeerIsolation = true
-	if err = netcfg.Apply(ctx, rules); err != nil {
-		t.Fatal(err)
+	// ICMP echo and the TCP SYN/SYN-ACK used by RDP must work without WinNAT.
+	for _, protocol := range []byte{1, 6} {
+		c1.inject <- peerPacket("10.254.250.2", "10.254.250.3", protocol, false)
+		if !waitPeerPacket(c2, protocol, false) {
+			t.Fatalf("routed protocol %d request failed", protocol)
+		}
+		c2.inject <- peerPacket("10.254.250.3", "10.254.250.2", protocol, true)
+		if !waitPeerPacket(c1, protocol, true) {
+			t.Fatalf("routed protocol %d reply failed", protocol)
+		}
 	}
+	t.Log("PASS: routed peer ICMP echo and TCP 3389 SYN/SYN-ACK without NAT or uplink")
+	rules.PeerIsolation = true
+	apply()
 	c1.inject <- udpPacket("10.254.250.2", "10.254.250.3", 32000, 32001, []byte("peer-blocked"))
 	if _, ok := waitPayload(c2, []byte("peer-blocked"), 2*time.Second); ok {
 		t.Fatal("peer isolation did not block forwarding")
 	}
 	t.Log("PASS: WFP blocks traffic between VPN peers")
+	rules.WindowsMode = "nat"
+	rules.Egress = egress
+	apply()
 	// Resolve through a DNS server on the physical uplink to prove WinNAT
 	// and return traffic work beyond the tunnel, independently of the UI.
 	ps := filepath.Join(os.Getenv("SystemRoot"), "System32", "WindowsPowerShell", "v1.0", "powershell.exe")
@@ -203,6 +227,94 @@ func TestWindowsNativeTunnel(t *testing.T) {
 	state, err = be.Device(ctx)
 	if err != nil || len(state.Peers) != 0 {
 		t.Fatalf("replace peers failed: %+v %v", state, err)
+	}
+}
+
+func checksum(p []byte) uint16 {
+	var sum uint32
+	for len(p) >= 2 {
+		sum += uint32(binary.BigEndian.Uint16(p))
+		p = p[2:]
+	}
+	if len(p) != 0 {
+		sum += uint32(p[0]) << 8
+	}
+	for sum>>16 != 0 {
+		sum = (sum & 0xffff) + (sum >> 16)
+	}
+	return ^uint16(sum)
+}
+
+func peerPacket(src, dst string, protocol byte, reply bool) []byte {
+	size := 8
+	if protocol == 6 {
+		size = 20
+	}
+	p := make([]byte, 20+size)
+	p[0], p[8], p[9] = 0x45, 64, protocol
+	binary.BigEndian.PutUint16(p[2:], uint16(len(p)))
+	copy(p[12:16], net.ParseIP(src).To4())
+	copy(p[16:20], net.ParseIP(dst).To4())
+	binary.BigEndian.PutUint16(p[10:], checksum(p[:20]))
+	segment := p[20:]
+	if protocol == 1 {
+		segment[0] = 8
+		if reply {
+			segment[0] = 0
+		}
+		binary.BigEndian.PutUint16(segment[4:], 0x2020)
+		binary.BigEndian.PutUint16(segment[6:], 1)
+		binary.BigEndian.PutUint16(segment[2:], checksum(segment))
+	} else {
+		sport, dport := uint16(32003), uint16(3389)
+		segment[12], segment[13] = 0x50, 2
+		if reply {
+			sport, dport = dport, sport
+			segment[13] = 18
+			binary.BigEndian.PutUint32(segment[8:], 1)
+		}
+		binary.BigEndian.PutUint16(segment, sport)
+		binary.BigEndian.PutUint16(segment[2:], dport)
+		binary.BigEndian.PutUint16(segment[14:], 65535)
+		pseudo := append([]byte(nil), p[12:20]...)
+		pseudo = append(pseudo, 0, protocol, 0, byte(size))
+		pseudo = append(pseudo, segment...)
+		binary.BigEndian.PutUint16(segment[16:], checksum(pseudo))
+	}
+	return p
+}
+
+func waitPeerPacket(tun *memoryTUN, protocol byte, reply bool) bool {
+	timer := time.NewTimer(5 * time.Second)
+	defer timer.Stop()
+	for {
+		select {
+		case <-timer.C:
+			return false
+		case p := <-tun.receive:
+			if len(p) < 28 || p[9] != protocol {
+				continue
+			}
+			i := int(p[0]&15) * 4
+			if protocol == 1 && len(p) >= i+8 {
+				want := byte(8)
+				if reply {
+					want = 0
+				}
+				if p[i] == want && binary.BigEndian.Uint16(p[i+4:]) == 0x2020 {
+					return true
+				}
+			}
+			if protocol == 6 && len(p) >= i+20 {
+				want := byte(2)
+				if reply {
+					want = 18
+				}
+				if p[i+13] == want {
+					return true
+				}
+			}
+		}
 	}
 }
 

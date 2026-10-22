@@ -153,6 +153,8 @@ export interface Status {
   subnet6?: string;
   egress?: string;
   firewallError?: string;
+  networkMode?: "nat" | "routed";
+  networkWarning?: string;
   firewallManaged: boolean;
   startedAt: string;
   sysctls: SysctlStatus[];

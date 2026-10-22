@@ -31,6 +31,8 @@ type Status struct {
 	Subnet6         string         `json:"subnet6,omitempty"`
 	Egress          string         `json:"egress,omitempty"`
 	FirewallError   string         `json:"firewallError,omitempty"`
+	NetworkMode     string         `json:"networkMode,omitempty"`
+	NetworkWarning  string         `json:"networkWarning,omitempty"`
 	FirewallManaged bool           `json:"firewallManaged"`
 	StartedAt       time.Time      `json:"startedAt"`
 	Sysctls         []SysctlStatus `json:"sysctls"`
@@ -55,6 +57,8 @@ func (e *Engine) Status() Status {
 		Subnet4:         e.cfg.Subnet4.Masked().String(),
 		Egress:          e.egress,
 		FirewallError:   e.fwErr,
+		NetworkMode:     e.networkMode,
+		NetworkWarning:  e.networkWarning,
 		FirewallManaged: e.cfg.ManageFirewall && e.be.Kind() != "mock",
 		StartedAt:       e.startedAt,
 		Settings:        e.settings,

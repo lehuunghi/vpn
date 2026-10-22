@@ -2,7 +2,7 @@
 
 VPN20 chạy máy chủ WireGuard và giao diện quản trị trực tiếp trên Windows x64,
 không cần Docker hoặc WSL. Bản Windows dùng driver **WireGuardNT** chính thức.
-Đây là bản thử nghiệm đầu tiên; cần thử trên máy đích trước khi dùng sản xuất.
+Bản Windows vẫn là prerelease; cần kiểm tra trên máy đích trước khi dùng sản xuất.
 
 ## Cài và sử dụng
 
@@ -23,9 +23,11 @@ mở ra Internet. Có thể bật HTTPS và đổi địa chỉ lắng nghe tron
 
 ## Yêu cầu và khác biệt nền tảng
 
-- Windows 10 1809+ hoặc Windows 11 **Pro/Enterprise x64**, Windows Server
-  2019/2022/2025. Yêu cầu nhà cung cấp **NetNat/WinNAT** hoạt động; Windows Home
-  chưa được hỗ trợ. Phiên bản đầu được kiểm tra tự động trên `windows-latest`.
+- Windows 10 1809+ hoặc Windows 11 **x64**, Windows Server 2019/2022/2025.
+  VPN ngang hàng không yêu cầu WinNAT. Windows Home có thể nhận ping và dùng
+  ứng dụng RDP để kết nối ra; nhận Microsoft RDP cần Pro/Enterprise/Education
+  hoặc Server. CI dùng Windows Server 2022 và 2025, chưa chạy trực tiếp trên
+  máy Windows 10/11 của người dùng.
 - Quyền Administrator để cài driver, dịch vụ và mạng. Dịch vụ chạy dưới
   `LocalSystem`, tự khởi động có độ trễ và tự chạy lại sau lỗi.
 - Không cần cài riêng ứng dụng WireGuard lên máy chủ. Thiết bị kết nối vẫn cần
@@ -39,7 +41,8 @@ mở ra Internet. Có thể bật HTTPS và đổi địa chỉ lắng nghe tron
 | Tài khoản, 2FA/mã khôi phục, phân quyền, giới hạn đăng nhập, TLS | Có |
 | Lưu lượng trực tiếp, lịch sử, nhật ký, health, Prometheus/API | Có |
 | Mã hóa WireGuard trong nhân | WireGuardNT |
-| NAT ra Internet IPv4 | WinNAT |
+| Ping, TCP/RDP giữa các IP VPN | Định tuyến, không cần WinNAT; tắt cô lập thiết bị |
+| NAT ra Internet IPv4 | WinNAT nếu khả dụng |
 | Cô lập các thiết bị VPN | WFP ở lớp IP forwarding, IPv4 và IPv6 |
 | Định tuyến IPv6 | Có, cần prefix và tuyến trả về phù hợp |
 | NAT66 như Linux | Chưa có |
@@ -47,11 +50,55 @@ mở ra Internet. Có thể bật HTTPS và đổi địa chỉ lắng nghe tron
 | Linux sysctl/nftables | Không áp dụng; dùng API mạng Windows |
 | Tự chạy khi bật máy, tự khôi phục dịch vụ | Có |
 
-WinNAT có giới hạn chia sẻ prefix. Nếu đã có NAT do Hyper-V, Docker, HNS hoặc
-phần mềm khác quản lý, VPN20 báo lỗi và giữ nguyên NAT đó. **Không xóa NAT khác
-một cách tự động.** Chọn máy chuyên dụng hoặc tự cấu hình định tuyến/NAT phù
-hợp rồi đặt `VPN20_MANAGE_FIREWALL` thành `false`. Khi tắt quản lý firewall,
-bạn cũng chịu trách nhiệm mở cổng, chuyển tiếp uplink và cô lập thiết bị.
+Mặc định `VPN20_WINDOWS_NETWORK_MODE=auto`: mở cổng, bật chuyển tiếp và áp dụng
+cô lập theo cài đặt. Nếu thiếu WinNAT hoặc WinNAT đang do Hyper-V/Docker/HNS
+quản lý, VPN20 tiếp tục chạy chế độ **routed**, hiện cảnh báo trên bảng điều
+khiển và giữ nguyên NAT của ứng dụng khác. `routed` chỉ dùng định tuyến;
+`nat` yêu cầu WinNAT thành công, nếu không thì dừng và báo lỗi.
+Lỗi driver, firewall hoặc cô lập vẫn khiến khởi động thất bại.
+
+## Ping và Remote Desktop giữa các máy
+
+1. Nâng cấp máy chủ bằng bộ cài mới. Trong **Cài đặt**, bấm **Chỉ mạng VPN ·
+   cho phép ping / remote**, rồi **Lưu**. Nút này đặt AllowedIPs bằng subnet
+   VPN, bỏ DNS riêng và tắt cô lập. Cài mới trên Windows mặc định dùng các
+   tuyến VPN này. Dữ liệu cũ được giữ nguyên khi nâng cấp.
+2. Kiểm tra từng thiết bị: bỏ giá trị DNS/AllowedIPs riêng cũ nếu cần. Tải lại
+   `.conf`, nhập vào WireGuard và kết nối trên mỗi máy. Ví dụ AllowedIPs
+   `10.8.0.0/24` cho phép đến tất cả IP trong subnet VPN; Internet vẫn đi qua
+   mạng thông thường. Tránh subnet VPN trùng subnet LAN.
+3. Trong phần tải cấu hình thiết bị, tải **Công cụ ping / Remote Desktop
+   Windows**. Script tải từ giao diện dùng đúng subnet hiện tại; script trong
+   Assets/ZIP mặc định `10.8.0.0/24`, có tham số `-VPNSubnet` để đổi.
+4. Trên mỗi máy Windows cần nhận ping/kết nối, kết nối WireGuard rồi mở
+   Windows PowerShell **Run as administrator**, chạy trong thư mục chứa script:
+
+```powershell
+# Cho phép nhận ping qua VPN
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Enable-VPN20-PeerAccess.ps1
+# Cho phép ping và bật máy chủ RDP, yêu cầu NLA
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Enable-VPN20-PeerAccess.ps1 -EnableRemoteDesktop
+# Chỉ định adapter nếu máy có nhiều tunnel
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Enable-VPN20-PeerAccess.ps1 -InterfaceAlias ten-tunnel -EnableRemoteDesktop
+```
+
+Script yêu cầu quyền quản trị, chỉ thêm quy tắc nhận ICMP/RDP trên adapter và
+IP VPN từ subnet VPN; không tắt Windows Firewall. Quy tắc có sẵn của Windows
+hoặc phần mềm khác giữ nguyên. RDP dùng cổng đã cấu hình và tài khoản Windows
+được phép đăng nhập với mật khẩu; script không vượt chính sách quản trị.
+
+Từ máy còn lại, ví dụ máy đích có IP VPN `10.8.0.3`:
+
+```powershell
+ping 10.8.0.3
+mstsc /v:10.8.0.3
+```
+
+Không cần chuyển tiếp cổng RDP 3389 trên router. Đây là mạng IP định tuyến;
+danh sách máy trong mục Network của Explorer không tự xuất hiện như LAN lớp 2.
+Dùng IP VPN để remote hoặc truy cập dịch vụ. Để hoàn tác quy tắc và các thiết
+lập RDP đã lưu, chạy script với `-Undo`. Nếu chỉ nhận ping trên Windows Home,
+chạy không có `-EnableRemoteDesktop`.
 
 ## Cấu hình và dữ liệu
 
@@ -69,6 +116,7 @@ Ví dụ cấu hình sau khi dừng dịch vụ:
   "VPN20_INTERFACE": "wg0",
   "VPN20_PORT": "51820",
   "VPN20_SUBNET": "10.8.0.0/24",
+  "VPN20_WINDOWS_NETWORK_MODE": "auto",
   "VPN20_EGRESS_INTERFACE": "Ethernet"
 }
 ```
@@ -109,9 +157,13 @@ quyền ghi, chép `config.example.json` vào đường dẫn cấu hình mặc 
 - IPv6 trong tunnel dùng được với `VPN20_SUBNET6`; để IPv6 ra Internet cần
   prefix được định tuyến từ upstream và tuyến trả về. Không coi ULA + WinNAT là
   giải pháp NAT66. Không bật MSS clamp từ cơ sở dữ liệu cũ khi chuyển từ Linux.
-- Bộ cài báo không khởi động được: xem `vpn20.log`; kiểm tra `Get-NetNat`,
-  `Get-Command New-NetNat`, subnet trùng LAN, cổng UDP đang bị chiếm, phần mềm
-  bảo mật chặn driver và kết nối uplink. VPN20 không tự tắt firewall khác.
+- Bộ cài báo không khởi động được: hộp thoại hiển thị lỗi cụ thể và phần cuối
+  nhật ký; xem thêm `install-error.txt` và `vpn20.log`. Kiểm tra JSON cấu hình,
+  subnet trùng LAN, cổng UDP, quyền quản trị và phần mềm bảo mật chặn driver.
+  Thiếu WinNAT không còn ngăn khởi động chế độ `auto`/`routed`.
+- Đã bắt tay nhưng không ping/remote: kiểm tra AllowedIPs, cô lập thiết bị và
+  firewall của máy đích; chạy helper trên máy đích. RDP cần phiên bản Windows
+  hỗ trợ nhận kết nối, dịch vụ TermService và tài khoản có quyền/mật khẩu.
 - Máy chủ đã hoạt động nhưng từ ngoài không bắt tay: kiểm tra IP công khai,
   CGNAT, UDP forwarding và firewall upstream.
 - Bộ cài/chương trình chưa được ký chứng thư phát hành; SmartScreen có thể
@@ -130,15 +182,18 @@ Trên máy Windows x64 chạy PowerShell có quyền Administrator, cài Go theo
 
 `build.ps1` kiểm tra web, Go, tải WireGuardNT 1.1 với SHA-256 cố định và kiểm
 tra Authenticode. Kiểm tra tích hợp tạo adapter thật, bắt tay và echo UDP với
-hai client WireGuard trong bộ nhớ, xác nhận cô lập WFP, truy vấn DNS qua
-WinNAT, đọc thống kê và thêm/xóa thiết bị. Kiểm tra bộ cài xác nhận dịch vụ
-automatic, trang web, tạo admin/thiết bị, QR/cấu hình, khởi động lại, lưu dữ
-liệu, nâng cấp và gỡ. Không chạy các phép thử tích hợp trên máy sản xuất.
+hai client WireGuard trong bộ nhớ, truyền ICMP và TCP SYN/SYN-ACK cổng 3389
+qua định tuyến không NAT, xác nhận cô lập WFP, truy vấn DNS qua WinNAT, đọc
+thống kê và thêm/xóa thiết bị. Các ca PowerShell 5.1 mô phỏng nhà cung cấp
+NetNat bị thiếu và NAT đang được dùng. Kiểm tra bộ cài xác nhận dịch vụ
+automatic, giao diện/API, cấu hình, helper ping/RDP và hoàn tác, khởi động lại,
+lưu dữ liệu, nâng cấp chế độ routed và gỡ. Phép thử TCP không xác minh phiên
+đăng nhập RDP/đồ họa từ đầu đến cuối. Không chạy các phép thử tích hợp trên máy sản xuất.
 
 Workflow `Windows release` chỉ phát hành sau khi kiểm tra Linux và Windows
 thành công. Mỗi bản phát hành cần tăng `packaging/windows/VERSION`, cập nhật
-release notes và đưa lên `main`. Assets gồm bộ cài `.exe`, ZIP và SHA-256.
-Bản đầu là **prerelease** vì cần kiểm thử ngoài thực tế trên máy đích, qua
+release notes và đưa lên `main`. Assets gồm bộ cài `.exe`, ZIP, script ping/RDP và SHA-256.
+Bản Windows là **prerelease** vì cần kiểm thử ngoài thực tế trên máy đích, qua
 router và sau khởi động lại toàn bộ máy; CI kiểm tra cấu hình tự chạy và
 restart dịch vụ, không reboot runner.
 
@@ -146,3 +201,6 @@ Nguồn kỹ thuật: [WireGuardNT](https://git.zx2c4.com/wireguard-nt/about/),
 [WireGuard Windows](https://github.com/WireGuard/wireguard-windows),
 [Microsoft WinNAT](https://learn.microsoft.com/windows-server/virtualization/hyper-v/setup-nat-network),
 [Windows Filtering Platform](https://learn.microsoft.com/windows/win32/fwp/windows-filtering-platform-start-page).
+
+[Microsoft: bật Remote Desktop](https://learn.microsoft.com/windows-server/remote/remote-desktop-services/remotepc/remote-desktop-allow-access),
+[quy tắc firewall](https://learn.microsoft.com/powershell/module/netsecurity/new-netfirewallrule).

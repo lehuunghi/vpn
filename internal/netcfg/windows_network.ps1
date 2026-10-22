@@ -1,49 +1,59 @@
-# Only resources named VPN20 and forwarding states recorded by VPN20 are owned.
+# Routing and firewall rules are independent of optional Windows Internet NAT.
 function Set-VPN20Network {
-    param([string]$Tunnel, [string]$Uplink, [string]$Subnet, [int]$Port, [string]$StatePath)
-    if (!(Get-Command New-NetNat -ErrorAction SilentlyContinue)) {
-        throw 'WinNAT is unavailable. Use Windows 10/11 Pro or Enterprise, or Windows Server 2016+ with the NetNat provider installed.'
-    }
-    $allNats = @(Get-NetNat -ErrorAction Stop)
-    $foreign = @($allNats | Where-Object Name -ne 'VPN20')
-    if ($foreign.Count -gt 0) {
-        throw ('WinNAT already belongs to another application: ' + ($foreign.Name -join ', ') + '. VPN20 did not modify it. See docs/windows.md for routed deployment.')
-    }
-    $existing = $allNats | Where-Object Name -eq 'VPN20'
-    if ($existing -and $existing.InternalIPInterfaceAddressPrefix -ne $Subnet) {
-        throw 'The existing VPN20 NAT uses another subnet. Stop VPN20 before changing VPN20_SUBNET.'
-    }
-    # Persist the original uplink state before changing it, including after an
-    # unexpected process exit. Never overwrite the original snapshot on restart.
+    param([string]$Tunnel, [string]$Uplink, [string]$Subnet, [int]$Port, [string]$StatePath,
+        [ValidateSet('auto','routed','nat')][string]$Mode = 'auto', [switch]$IPv6)
     $states = @()
     if (Test-Path -LiteralPath $StatePath) {
         $snapshot = Get-Content -Raw -LiteralPath $StatePath | ConvertFrom-Json
         $states = @($snapshot.Interfaces)
     }
-    $rows = @(Get-NetIPInterface -InterfaceAlias $Uplink -PolicyStore ActiveStore)
+    $rows = @()
+    if ($Uplink) {
+        $rows = @(Get-NetIPInterface -InterfaceAlias $Uplink -AddressFamily IPv4 -PolicyStore ActiveStore)
+        if ($IPv6) { $rows += @(Get-NetIPInterface -InterfaceAlias $Uplink -AddressFamily IPv6 -PolicyStore ActiveStore) }
+    }
     foreach ($row in $rows) {
         if (!($states | Where-Object { $_.InterfaceIndex -eq $row.InterfaceIndex -and $_.AddressFamily -eq [string]$row.AddressFamily })) {
             $states += [pscustomobject]@{InterfaceIndex=$row.InterfaceIndex; InterfaceAlias=$row.InterfaceAlias; AddressFamily=[string]$row.AddressFamily; Forwarding=[string]$row.Forwarding}
         }
     }
     $null = New-Item -ItemType Directory -Force -Path (Split-Path -Parent $StatePath)
-    # An object envelope avoids Windows PowerShell 5.1 adding another array
-    # level each time a JSON array is passed through ConvertFrom-Json.
     [pscustomobject]@{Version=1; Interfaces=@($states)} | ConvertTo-Json -Depth 5 |
         Set-Content -LiteralPath ($StatePath + '.tmp') -Encoding UTF8
     Move-Item -LiteralPath ($StatePath + '.tmp') -Destination $StatePath -Force
-    $rows | Set-NetIPInterface -Forwarding Enabled -PolicyStore ActiveStore
-    if (!$existing) {
-        $null = New-NetNat -Name 'VPN20' -InternalIPInterfaceAddressPrefix $Subnet
-    }
+    if ($rows.Count) { $rows | Set-NetIPInterface -Forwarding Enabled -PolicyStore ActiveStore }
     Get-NetFirewallRule -Group 'VPN20' -ErrorAction SilentlyContinue | Remove-NetFirewallRule
     $null = New-NetFirewallRule -Name 'VPN20-WireGuard' -DisplayName 'VPN20 WireGuard UDP' -Group 'VPN20' -Direction Inbound -Action Allow -Protocol UDP -LocalPort $Port -Profile Any
     $null = New-NetFirewallRule -Name 'VPN20-Tunnel' -DisplayName 'VPN20 tunnel traffic' -Group 'VPN20' -Direction Inbound -Action Allow -InterfaceAlias $Tunnel -Profile Any
+    $result = [pscustomobject]@{Mode='routed'; Warning='VPN ngang hang dang hoat dong. Truy cap Internet qua may chu chua duoc bat.'}
+    if ($Mode -eq 'routed') {
+        # A previous crash may have left our own NAT behind. Other NATs are untouched.
+        try { Get-NetNat -Name 'VPN20' -ErrorAction Stop | Remove-NetNat -Confirm:$false } catch { }
+        return $result
+    }
+    try {
+        if (!$Uplink) { throw 'Khong co tuyen Internet mac dinh.' }
+        if (!(Get-Command New-NetNat -ErrorAction SilentlyContinue)) { throw 'Windows khong co WinNAT/NetNat.' }
+        $allNats = @(Get-NetNat -ErrorAction Stop)
+        $foreign = @($allNats | Where-Object Name -ne 'VPN20')
+        if ($foreign.Count -gt 0) { throw ('WinNAT dang duoc ung dung khac su dung: ' + ($foreign.Name -join ', ')) }
+        $existing = $allNats | Where-Object Name -eq 'VPN20'
+        if ($existing -and $existing.InternalIPInterfaceAddressPrefix -ne $Subnet) { throw 'VPN20 NAT dang dung subnet khac; dung dich vu truoc khi doi subnet.' }
+        if (!$existing) { $null = New-NetNat -Name 'VPN20' -InternalIPInterfaceAddressPrefix $Subnet }
+        $result.Mode = 'nat'
+        $result.Warning = ''
+    } catch {
+        if ($Mode -eq 'nat') { throw }
+        $result.Warning = 'VPN ngang hang van hoat dong; chua NAT Internet: ' + $_.Exception.Message
+    }
+    return $result
 }
 
 function Remove-VPN20Network {
     param([string]$StatePath)
-    Get-NetNat -Name 'VPN20' -ErrorAction SilentlyContinue | Remove-NetNat -Confirm:$false
+    # Missing/disabled WinNAT must not prevent stopping or uninstalling VPN20.
+    try { $ownedNat = @(Get-NetNat -Name 'VPN20' -ErrorAction Stop) } catch { $ownedNat = @() }
+    if ($ownedNat.Count) { $ownedNat | Remove-NetNat -Confirm:$false }
     Get-NetFirewallRule -Group 'VPN20' -ErrorAction SilentlyContinue | Remove-NetFirewallRule
     if (Test-Path -LiteralPath $StatePath) {
         $snapshot = Get-Content -Raw -LiteralPath $StatePath | ConvertFrom-Json

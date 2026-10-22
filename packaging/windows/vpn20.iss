@@ -74,10 +74,20 @@ begin
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
+var
+  Lines: TArrayOfString;
+  Detail: String;
+  I: Integer;
 begin
   if CurStep = ssPostInstall then
     if not RunServiceCommand('install-service') then
-      RaiseException('VPN20 could not start. See C:\ProgramData\VPN20\vpn20.log. Check WinNAT availability and existing NAT networks, then run the installer again.');
+    begin
+      Detail := 'VPN20 could not start.';
+      if LoadStringsFromFile(ExpandConstant('{commonappdata}\VPN20\install-error.txt'), Lines) then
+        for I := 0 to GetArrayLength(Lines) - 1 do
+          Detail := Detail + #13#10 + Lines[I];
+      RaiseException(Detail + #13#10#13#10 + 'Full log: ' + ExpandConstant('{commonappdata}\VPN20\vpn20.log'));
+    end;
 end;
 
 function InitializeUninstall(): Boolean;

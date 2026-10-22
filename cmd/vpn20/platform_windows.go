@@ -10,6 +10,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -35,7 +36,18 @@ func configPath() string {
 	return filepath.Join(os.Getenv("ProgramData"), "VPN20", "config.json")
 }
 
-func platformInit() error {
+func platformInit() (err error) {
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "stop-service", "uninstall-service", "version", "--version", "-v", "help", "--help", "-h":
+			return nil
+		}
+	}
+	defer func() {
+		if err != nil && len(os.Args) > 1 && os.Args[1] == "install-service" {
+			writeInstallResult(err)
+		}
+	}()
 	data, err := os.ReadFile(configPath())
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
@@ -68,9 +80,41 @@ func platformCommand(args []string) (bool, error) {
 	case "service":
 		return true, svc.Run(serviceName, &windowsService{})
 	case "install-service", "uninstall-service", "stop-service":
-		return true, manageService(args[0])
+		err := manageService(args[0])
+		if args[0] == "install-service" {
+			writeInstallResult(err)
+		}
+		return true, err
 	}
 	return false, nil
+}
+
+// A hidden installer process has no visible stderr. Persist its actual error
+// and a bounded log tail so Setup can show actionable diagnostics.
+func writeInstallResult(err error) {
+	dir := filepath.Dir(configPath())
+	path := filepath.Join(dir, "install-error.txt")
+	if err == nil {
+		_ = os.Remove(path)
+		return
+	}
+	_ = os.MkdirAll(dir, 0700)
+	message := err.Error()
+	logPath := filepath.Join(dir, "vpn20.log")
+	if f, e := os.Open(logPath); e == nil {
+		defer f.Close()
+		if st, e := f.Stat(); e == nil {
+			offset := st.Size() - 3500
+			if offset < 0 {
+				offset = 0
+			}
+			_, _ = f.Seek(offset, io.SeekStart)
+			if tail, e := io.ReadAll(io.LimitReader(f, 3500)); e == nil {
+				message += "\r\n\r\nRecent service log:\r\n" + string(tail)
+			}
+		}
+	}
+	_ = os.WriteFile(path, []byte("\xef\xbb\xbf"+message), 0600)
 }
 
 type windowsService struct{}

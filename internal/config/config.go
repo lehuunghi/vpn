@@ -18,10 +18,11 @@ import (
 
 // Config is the process configuration.
 type Config struct {
-	DataDir string
-	DBPath  string
-	Backend string // auto | kernel | userspace | mock
-	Iface   string
+	WindowsNetworkMode string
+	DataDir            string
+	DBPath             string
+	Backend            string // auto | kernel | userspace | mock
+	Iface              string
 	// Listen is the UDP port WireGuard listens on.
 	ListenPort int
 	// Subnet4 / Subnet6 are the tunnel networks. The server takes the first
@@ -110,6 +111,10 @@ func envDuration(key string, def time.Duration) (time.Duration, error) {
 func FromEnv() (*Config, error) {
 	var errs []error
 	c := &Config{}
+	c.WindowsNetworkMode = strings.ToLower(env("VPN20_WINDOWS_NETWORK_MODE", "auto"))
+	if runtime.GOOS == "windows" && c.WindowsNetworkMode != "auto" && c.WindowsNetworkMode != "routed" && c.WindowsNetworkMode != "nat" {
+		errs = append(errs, errors.New("VPN20_WINDOWS_NETWORK_MODE: must be auto, routed or nat"))
+	}
 	dataDefault, httpDefault := "/data", ":51821"
 	if runtime.GOOS == "windows" {
 		dataDefault = filepath.Join(env("ProgramData", `C:\ProgramData`), "VPN20")

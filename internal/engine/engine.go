@@ -33,15 +33,17 @@ type Engine struct {
 	be  wg.Backend
 	log *slog.Logger
 
-	mu        sync.RWMutex
-	settings  Settings
-	serverKey wg.Key
-	startedAt time.Time
-	sysctls   []netcfg.Result
-	egress    string
-	fwErr     string
-	peers     map[string]*store.Peer // by id
-	byKey     map[string]*store.Peer // by public key
+	mu             sync.RWMutex
+	settings       Settings
+	serverKey      wg.Key
+	startedAt      time.Time
+	sysctls        []netcfg.Result
+	egress         string
+	fwErr          string
+	networkMode    string
+	networkWarning string
+	peers          map[string]*store.Peer // by id
+	byKey          map[string]*store.Peer // by public key
 
 	col *collector
 	hub *Hub
@@ -195,6 +197,14 @@ func (e *Engine) loadSettings(ctx context.Context) error {
 	}
 	if !ok {
 		def := DefaultSettings(e.cfg.InitialEndpoint, e.cfg.InitialDNS, e.cfg.ListenPort)
+		if runtime.GOOS == "windows" {
+			def.ClientRoutes = e.cfg.Subnet4.Masked().String()
+			if e.cfg.Subnet6.IsValid() {
+				def.ClientRoutes += ", " + e.cfg.Subnet6.Masked().String()
+			}
+			// Peer access keeps the client's existing Internet and DNS intact.
+			def.DNS = ""
+		}
 		s = &def
 		if err := saveSettings(ctx, e.st, s); err != nil {
 			return err
@@ -258,11 +268,12 @@ func (e *Engine) applyFirewall(ctx context.Context) error {
 		if d, err := netcfg.DefaultEgress(); err == nil {
 			egress = d
 		} else {
-			e.log.Warn("could not detect the egress interface; masquerading on every non-tunnel interface", "error", err)
+			e.log.Warn("could not detect the default egress interface", "error", err)
 		}
 	}
 	s := e.Settings()
 	rules := netcfg.Rules{
+		WindowsMode:   e.cfg.WindowsNetworkMode,
 		Iface:         e.cfg.Iface,
 		Egress:        egress,
 		ListenPort:    e.cfg.ListenPort,
@@ -270,12 +281,19 @@ func (e *Engine) applyFirewall(ctx context.Context) error {
 		PeerIsolation: s.PeerIsolation,
 		ClampMSS:      s.ClampMSS,
 	}
+	mode, warning := "nat", ""
 	if err := netcfg.Apply(ctx, rules); err != nil {
-		return err
+		var notice *netcfg.NetworkNotice
+		if !errors.As(err, &notice) {
+			return err
+		}
+		mode, warning = notice.Mode, notice.Message
+		e.log.Warn("VPN peer routing is active without automatic Internet NAT", "detail", warning)
 	}
 	e.mu.Lock()
 	e.egress = egress
 	e.fwErr = ""
+	e.networkMode, e.networkWarning = mode, warning
 	e.mu.Unlock()
 	e.log.Info("firewall rules applied", "egress", egress, "peerIsolation", s.PeerIsolation, "clampMSS", s.ClampMSS)
 	return nil

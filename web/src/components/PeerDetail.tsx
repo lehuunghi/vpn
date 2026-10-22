@@ -169,8 +169,10 @@ export function PeerDetail({ peer, live, settings, isAdmin, onClose, onChanged, 
               <a className="btn" href={`/api/peers/${peer.id}/config?download=1`}>
                 <Download /> Tải tệp .conf
               </a>
+              <a className="btn" href="/api/windows/peer-access.ps1"><Download /> Công cụ ping / Remote Desktop Windows</a>
               <span className="small faint">Bất kỳ ai có tệp này đều có thể kết nối với danh tính của thiết bị. Việc xem cấu hình được ghi trong nhật ký.</span>
             </div>
+            <p className="small muted">Để các máy liên lạc qua IP VPN: tắt Cô lập thiết bị, cho phép mạng VPN trong AllowedIPs. Trên máy Windows nhận kết nối, chạy công cụ bằng PowerShell quản trị; thêm -EnableRemoteDesktop để bật RDP. Windows Home nhận ping nhưng không có máy chủ RDP tích hợp.</p>
           </div>
         )}
       </Modal>
