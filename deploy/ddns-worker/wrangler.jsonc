@@ -1,0 +1,20 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "vpn20-ddns",
+  "main": "src/index.js",
+  "compatibility_date": "2025-01-01",
+  "workers_dev": true,
+  "vars": {
+    "CF_ZONE_ID": "REPLACE_WITH_ZONE_ID_FOR_20_COM_VN",
+    "MAX_HOSTS": "50",
+    "CLAIMS_PER_IP_DAY": "3",
+    "SELF_REGISTRATION": "true"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "vpn20-ddns",
+      "database_id": "00000000-0000-0000-0000-000000000000"
+    }
+  ]
+}

@@ -34,20 +34,20 @@ func sessionOf(r *http.Request) *store.Session {
 	return s
 }
 
-func (s *Server) setCookie(w http.ResponseWriter, token string, expires time.Time) {
+func (s *Server) setCookie(w http.ResponseWriter, r *http.Request, token string, expires time.Time) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     cookieName,
 		Value:    token,
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   s.cfg.TLSEnabled() || s.cfg.SecureCookies,
+		Secure:   r.TLS != nil || s.cfg.TLSEnabled() || s.cfg.SecureCookies,
 		SameSite: http.SameSiteStrictMode,
 		Expires:  expires,
 	})
 }
 
-func (s *Server) clearCookie(w http.ResponseWriter) {
-	http.SetCookie(w, &http.Cookie{Name: cookieName, Value: "", Path: "/", HttpOnly: true, Secure: s.cfg.TLSEnabled() || s.cfg.SecureCookies, SameSite: http.SameSiteStrictMode, MaxAge: -1})
+func (s *Server) clearCookie(w http.ResponseWriter, r *http.Request) {
+	http.SetCookie(w, &http.Cookie{Name: cookieName, Value: "", Path: "/", HttpOnly: true, Secure: r.TLS != nil || s.cfg.TLSEnabled() || s.cfg.SecureCookies, SameSite: http.SameSiteStrictMode, MaxAge: -1})
 }
 
 // loadSession resolves the cookie to a user, if the session is valid.
@@ -243,7 +243,7 @@ func (s *Server) startSession(w http.ResponseWriter, r *http.Request, u *store.U
 	}); err != nil {
 		return err
 	}
-	s.setCookie(w, token, now.Add(s.cfg.SessionMax))
+	s.setCookie(w, r, token, now.Add(s.cfg.SessionMax))
 	return nil
 }
 
@@ -363,7 +363,7 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	if sess := sessionOf(r); sess != nil {
 		_ = s.eng.Store().DeleteSession(r.Context(), sess.TokenHash)
 	}
-	s.clearCookie(w)
+	s.clearCookie(w, r)
 	s.audit(r, "logout", userOf(r).Username, "")
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }

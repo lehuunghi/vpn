@@ -2,7 +2,7 @@ name: Linux packages
 on:
   push:
     tags: ['v[0-9]*']
-    branches: [windows-relay-parity]
+    branches: [windows-relay-parity, ddns-auto-ssl]
     paths: ['cmd/**', 'internal/**', 'packaging/linux/**', 'web/**', 'go.*', 'VERSION', '.github/workflows/linux-release.yml']
   workflow_dispatch:
 permissions:
@@ -29,6 +29,10 @@ jobs:
           go test -count=1 ./...
           if [ "$GITHUB_REF_TYPE" = tag ]; then export VPN20_VERSION="${GITHUB_REF_NAME#v}"; fi
           bash packaging/linux/build.sh '${{ matrix.arch }}'
+      - name: Verify and package Worker sources
+        run: |
+          node --test deploy/ddns-worker/tests/api.test.js
+          (cd deploy/ddns-worker && zip -r ../../dist/release/VPN20-DDNS-Worker-0.2.0.zip src tests schema.sql package.json wrangler.jsonc README.md)
       - name: Verify real systemd installation, update and rollback
         if: matrix.arch == 'amd64'
         run: |

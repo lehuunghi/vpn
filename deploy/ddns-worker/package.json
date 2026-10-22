@@ -1,0 +1,10 @@
+{
+  "name": "vpn20-ddns-worker",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/api.test.js"
+  },
+  "engines": { "node": ">=24" }
+}

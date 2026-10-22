@@ -23,6 +23,10 @@ Windows có máy chủ RDP. Chưa kiểm thử trực tiếp mọi edition/thi�
 
 ## Chuẩn bị mạng cho mọi cách cài
 
+Để cấp tên **ten.vpn.20.com.vn** và SSL tự động chỉ bằng một nút trong
+Cài đặt, xem [Subdomain và HTTPS tự động](subdomain.md). Tính năng dùng
+**TCP 443** và giữ truy cập LAN ở cổng 51821.
+
 1. Đặt IP LAN cố định hoặc DHCP reservation cho máy chủ.
 2. Chọn IP công khai/tên miền, ví dụ `vpn.example.com`; tên miền phải trỏ
    đúng về mạng máy chủ. VPN20 không cấp IP công khai. Xem
