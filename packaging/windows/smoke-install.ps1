@@ -93,7 +93,12 @@ try {
     if ($LASTEXITCODE) { throw 'Service stop failed' }
     if (Get-NetNat -Name VPN20 -ErrorAction SilentlyContinue) { throw 'VPN20 NAT was not cleaned up' }
     if (Get-NetFirewallRule -Name 'VPN20-Admin-LAN' -ErrorAction SilentlyContinue) { throw 'Admin LAN rule was not cleaned up' }
-    # Reproduce an older loopback-only installation, then opt in using the CLI.
+    # Reproduce an older loopback-only installation on a custom port. Running
+    # the actual installer must enable LAN without any manual enable-lan step.
+    $customTCP = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Any, 0)
+    try { $customTCP.Start(); $adminPort = $customTCP.LocalEndpoint.Port } finally { $customTCP.Stop() }
+    $base = "http://127.0.0.1:$adminPort"
+    $headers = @{Origin=$base}
     $settings = Get-Content "$data\config.json" -Raw | ConvertFrom-Json
     $settings | Add-Member -NotePropertyName VPN20_HTTP_LISTEN -NotePropertyValue "127.0.0.1:$adminPort" -Force
     $settings | ConvertTo-Json | Set-Content "$data\config.json" -Encoding utf8NoBOM
@@ -102,9 +107,12 @@ try {
         try { $null=Invoke-RestMethod "$base/api/health"; break } catch { Start-Sleep -Milliseconds 500 }
     }
     if (Get-NetFirewallRule -Name 'VPN20-Admin-LAN' -ErrorAction SilentlyContinue) { throw 'Loopback listener unexpectedly opened LAN firewall' }
-    & "$app\vpn20.exe" enable-lan
-    if ($LASTEXITCODE) { throw 'LAN opt-in command failed' }
-    if ((Get-Content "$data\config.json" -Raw | ConvertFrom-Json).VPN20_HTTP_LISTEN -ne "0.0.0.0:$adminPort") { throw 'LAN command lost the configured port' }
+    $p = Start-Process -FilePath $Installer -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-' -Wait -PassThru
+    if ($p.ExitCode -ne 0) { throw 'Installer did not automatically enable LAN' }
+    if ((Get-Content "$data\config.json" -Raw | ConvertFrom-Json).VPN20_HTTP_LISTEN -ne "0.0.0.0:$adminPort") { throw 'Automatic LAN setup lost the configured port' }
+    $adminRule = Get-NetFirewallRule -Name 'VPN20-Admin-LAN'
+    if ((@($adminRule | Get-NetFirewallAddressFilter).RemoteAddress -join ',') -ne 'LocalSubnet') { throw 'Automatic LAN setup opened an unrestricted admin firewall' }
+    if ([int]($adminRule | Get-NetFirewallPortFilter).LocalPort -ne $adminPort) { throw 'Automatic LAN firewall lost the configured port' }
     $null = Invoke-RestMethod "http://$($lanAddress.IPAddress):$adminPort/api/health"
     $null=Invoke-RestMethod "$base/api/auth/login" -Method Post -ContentType 'application/json' -Headers $headers -Body (@{username='releaseadmin';password='VPN20-release-test-only!82'} | ConvertTo-Json) -SessionVariable session
     $saved = @(Invoke-RestMethod "$base/api/peers" -Headers $headers -WebSession $session)
@@ -155,7 +163,7 @@ try {
     $p = Start-Process -FilePath $Installer -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-' -Wait -PassThru
     if ($p.ExitCode -ne 0) { throw 'Installer did not recover after releasing the administration port' }
     $null = Invoke-RestMethod "$base/api/health"
-    Write-Output 'PASS: install, actual LAN IP, scoped admin TCP firewall, loopback opt-in, automatic service, UI/API, peer config/QR, scoped ping/RDP helper and undo, restart/persistence, routed upgrade, failed-install exit code and recovery'
+    Write-Output 'PASS: install, actual LAN IP, scoped admin TCP firewall, automatic loopback-to-LAN upgrade with a custom port, automatic service, UI/API, peer config/QR, scoped ping/RDP helper and undo, restart/persistence, routed upgrade, failed-install exit code and recovery'
 } finally {
     if (Test-Path "$app\unins000.exe") {
         $p=Start-Process "$app\unins000.exe" -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait -PassThru

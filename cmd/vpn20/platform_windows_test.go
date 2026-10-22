@@ -29,13 +29,15 @@ func TestWindowsStopIgnoresBrokenConfig(t *testing.T) {
 	if err := platformInit(); err != nil {
 		t.Fatal(err)
 	}
-	os.Args = []string{"vpn20.exe", "install-service"}
-	if err := platformInit(); err == nil {
-		t.Fatal("invalid configuration was accepted for startup")
-	}
-	body, err := os.ReadFile(filepath.Join(filepath.Dir(path), "install-error.txt"))
-	if err != nil || !strings.Contains(string(body), "config.json") {
-		t.Fatalf("installer lost configuration error: %s %v", body, err)
+	for _, command := range []string{"install-service", "enable-lan"} {
+		os.Args = []string{"vpn20.exe", command}
+		if err := platformInit(); err == nil {
+			t.Fatal("invalid configuration was accepted for startup")
+		}
+		body, err := os.ReadFile(filepath.Join(filepath.Dir(path), "install-error.txt"))
+		if err != nil || !strings.Contains(string(body), "config.json") {
+			t.Fatalf("%s lost configuration error: %s %v", command, body, err)
+		}
 	}
 }
 

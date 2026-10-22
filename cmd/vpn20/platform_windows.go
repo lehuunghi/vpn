@@ -44,7 +44,7 @@ func platformInit() (err error) {
 		}
 	}
 	defer func() {
-		if err != nil && len(os.Args) > 1 && os.Args[1] == "install-service" {
+		if err != nil && len(os.Args) > 1 && (os.Args[1] == "install-service" || os.Args[1] == "enable-lan") {
 			writeInstallResult(err)
 		}
 	}()
@@ -79,20 +79,18 @@ func platformCommand(args []string) (bool, error) {
 	switch args[0] {
 	case "service":
 		return true, svc.Run(serviceName, &windowsService{})
-	case "enable-lan":
-		return true, enableLAN()
-	case "install-service", "uninstall-service", "stop-service":
-		err := manageService(args[0])
-		if args[0] == "install-service" {
-			writeInstallResult(err)
-		}
+	case "install-service", "enable-lan":
+		err := enableLAN()
+		writeInstallResult(err)
 		return true, err
+	case "uninstall-service", "stop-service":
+		return true, manageService(args[0])
 	}
 	return false, nil
 }
 
-// Existing installations keep their explicit listener during upgrades. This
-// administrator command opts them into LAN access without losing other keys.
+// Setup and service installation enable LAN automatically, including upgrades
+// from a loopback-only installation. Preserve its port and other configuration.
 func enableLAN() error {
 	if !windows.GetCurrentProcessToken().IsElevated() {
 		return errors.New("run this command as Administrator")

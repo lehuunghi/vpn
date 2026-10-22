@@ -23,10 +23,10 @@ Bản Windows vẫn là prerelease; cần kiểm tra trên máy đích trước 
 5. Thêm thiết bị, quét QR bằng ứng dụng WireGuard hoặc tải cấu hình `.conf`.
    Kiểm tra bắt tay, truy cập mạng và lưu lượng trên bảng điều khiển.
 
-Từ 1.1.1, bản cài mới cho phép quản trị bằng `http://IP-LAN:51821` trong cùng
-subnet; Windows Firewall tự mở TCP đúng cổng với phạm vi LocalSubnet. Bản
-nâng cấp giữ địa chỉ đã cấu hình. Chạy `vpn20.exe enable-lan` bằng Administrator
-để bật LAN cho bản cũ. Xem [LAN, subdomain và Internet](public-access.md).
+Từ 1.1.2, bộ cài tự bật quản trị LAN khi cài mới và nâng cấp, kể cả khi bản
+cũ chỉ lắng nghe localhost. Truy cập `http://IP-LAN:51821` (hoặc cổng đã cấu
+hình); Windows Firewall tự mở TCP đúng cổng với phạm vi LocalSubnet. Không
+cần chạy lệnh bật LAN sau khi cài. Xem [hướng dẫn truy cập LAN](lan-access.md).
 
 ## Yêu cầu và khác biệt nền tảng
 

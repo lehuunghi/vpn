@@ -28,7 +28,8 @@ Quản trị viên có nút **Cập nhật phiên bản mới nhất** trong **C
 
 Tải bộ cài Windows x64/x86 tại **[Releases](https://github.com/lehuunghi/vpn/releases)**.
 Bộ cài kèm WireGuardNT và dịch vụ **VPN20** tự chạy khi bật máy, không cần
-Docker/WSL. Mở <http://127.0.0.1:51821> trên máy chủ hoặc `http://IP-LAN:51821` từ máy cùng mạng để thiết lập. Xem **[hướng dẫn Windows](docs/windows.md)**
+Docker/WSL. Bộ cài tự bật LAN khi cài mới và nâng cấp, giữ cổng đã cấu hình.
+Mở <http://127.0.0.1:51821> trên máy chủ hoặc `http://IP-LAN:51821` từ máy cùng mạng để thiết lập. Xem **[hướng dẫn Windows](docs/windows.md)**
 về bộ cài x64/x86, relay TCP/UDP/ping ra LAN không cần WinNAT, IPv6, TCP MSS và giới hạn nền tảng.
 
 ## Container tự động trên GHCR
@@ -57,9 +58,6 @@ Workflow tự build khi cập nhật `main` hoặc tạo tag `v*`, rồi đẩy 
   nhật ký thao tác, kể cả việc xem cấu hình thiết bị. Xem [SECURITY.md](SECURITY.md).
 - **Giám sát:** `/api/health` kiểm tra tình trạng; `/metrics` cung cấp dữ liệu
   Prometheus và yêu cầu mã truy cập hoặc phiên đăng nhập.
-- **Tên miền:** chọn subdomain trong domain Cloudflare đã cấu hình, tự đồng
-  bộ IPv4 công khai mỗi 5 phút. Có hướng dẫn HTTPS và Tunnel cho trang quản
-  trị qua Internet/CGNAT tại [docs/public-access.md](docs/public-access.md).
 - **Tự chứa:** một chương trình Go, một cơ sở dữ liệu SQLite trong `/data`,
   không cần dịch vụ bổ sung. Hỗ trợ kiến trúc amd64 và arm64.
 
@@ -77,8 +75,8 @@ Dùng ứng dụng WireGuard trên điện thoại để quét mã QR.
 
 Compose bridge mặc định mở TCP 51821 trên host để truy cập bằng IP LAN.
 Đặt `VPN20_ADMIN_BIND` trong `.env` để chỉ mở trên IP LAN cụ thể hoặc
-`127.0.0.1` cho proxy cùng host. Dùng HTTPS/reverse proxy hoặc Cloudflare
-Tunnel để quản trị qua Internet; xem [hướng dẫn LAN và domain](docs/public-access.md).
+`127.0.0.1` cho proxy cùng host. Dùng HTTPS/reverse proxy để quản trị qua
+Internet; xem [hướng dẫn truy cập LAN](docs/lan-access.md).
 
 `docker-compose.host.yml` chạy trực tiếp trên mạng host để có hiệu năng cao.
 Xem [docs/performance.md](docs/performance.md) về các tham số sysctl liên quan.
@@ -109,10 +107,6 @@ bị, TCP MSS và khóa chia sẻ trước.
 | `VPN20_EGRESS_INTERFACE` | tự động | Giao diện NAT ra ngoài; relay Windows tự dùng bảng định tuyến máy chủ, hoặc ghim IP nguồn theo card đã chọn. |
 | `VPN20_HTTP_LISTEN` | `:51821` | Địa chỉ lắng nghe của giao diện quản trị. |
 | `VPN20_ADMIN_BIND` | `0.0.0.0` | IP host ánh xạ cổng quản trị trong Compose bridge; đặt IP LAN hoặc `127.0.0.1` nếu cần giới hạn. |
-| `VPN20_CLOUDFLARE_DOMAIN` | trống | Domain có sẵn do bạn sở hữu để chọn subdomain trong quản trị. |
-| `VPN20_CLOUDFLARE_ZONE_ID` | trống | Zone ID Cloudflare chứa domain đó. |
-| `VPN20_CLOUDFLARE_API_TOKEN_FILE` | trống | File chứa token Zone DNS Edit, giới hạn đúng zone; khuyến nghị dùng. |
-| `VPN20_CLOUDFLARE_API_TOKEN` | trống | Nguồn token thay cho file; không đặt cả hai. Token không được trả về trình duyệt. |
 | `VPN20_TLS_SELF_SIGNED` | `false` | Bật HTTPS bằng chứng chỉ tự tạo, lưu trong `/data`. |
 | `VPN20_TLS_CERT`, `VPN20_TLS_KEY` | | Bật HTTPS bằng chứng chỉ và khóa của bạn. |
 | `VPN20_SECURE_COOKIES` | `false` | Đánh dấu cookie `Secure` khi TLS kết thúc tại proxy. |

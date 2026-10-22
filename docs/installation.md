@@ -25,9 +25,8 @@ Windows có máy chủ RDP. Chưa kiểm thử trực tiếp mọi edition/thi�
 
 1. Đặt IP LAN cố định hoặc DHCP reservation cho máy chủ.
 2. Chọn IP công khai/tên miền, ví dụ `vpn.example.com`; tên miền phải trỏ
-   đúng về mạng máy chủ. Có thể chọn subdomain và tự đồng bộ Cloudflare DNS
-   khi đã cấu hình domain/token; VPN20 không cấp IP công khai. Xem
-   [hướng dẫn LAN, domain và Tunnel](public-access.md).
+   đúng về mạng máy chủ. VPN20 không cấp IP công khai. Xem
+   [hướng dẫn truy cập LAN](lan-access.md).
 3. Mở **UDP 51820** trên firewall của máy/nhà cung cấp VPS. Nếu sau router,
    chuyển tiếp UDP 51820 về IP LAN máy chủ; nhiều lớp NAT cần chuyển tiếp từng
    lớp. CGNAT cần IP công khai hoặc một đường chuyển tiếp UDP phù hợp.
@@ -60,7 +59,9 @@ Get-AuthenticodeSignature .\VPN20-<version>-windows-x64-setup.exe |
    kiểm tra digest GitHub; nếu đã ghim chứng chỉ thì vẫn bắt buộc khớp chữ ký.
 3. Chạy `.exe` bằng Administrator, làm theo cửa sổ cài đặt. Bộ cài thêm
    shortcut, driver, dịch vụ **VPN20** chạy dưới LocalSystem, tự chạy khi bật
-   máy và tự khởi động lại khi lỗi. Server Core có thể cài im lặng:
+   máy và tự khởi động lại khi lỗi. Từ 1.1.2, cài mới/nâng cấp đều tự bật LAN,
+   giữ cổng đã cấu hình và thêm firewall TCP giới hạn LocalSubnet. Không cần
+   chạy lệnh bật LAN sau cài đặt. Server Core có thể cài im lặng:
 
 ```powershell
 .\VPN20-<version>-windows-x64-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-
@@ -343,9 +344,8 @@ thử nghiệm/quản trị nội bộ. Trình duyệt có thể cảnh báo cho
 
 ## Cập nhật từ giao diện quản trị
 
-Subdomain Cloudflare, HTTPS và truy cập khi có CGNAT được hướng dẫn riêng
-tại [LAN, subdomain và Internet](public-access.md), kèm file Compose cho
-DNS và Cloudflare Tunnel.
+Truy cập bằng IP LAN và kiểm tra firewall được hướng dẫn riêng tại
+[hướng dẫn LAN](lan-access.md).
 
 Đăng nhập bằng **admin** → **Cài đặt** → **Phiên bản và cập nhật**. Có thể bấm
 **Kiểm tra phiên bản** để xem thông tin, hoặc bấm thẳng **Cập nhật phiên bản
