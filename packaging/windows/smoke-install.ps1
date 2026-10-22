@@ -1,7 +1,9 @@
-param([Parameter(Mandatory)][string]$Installer)
+param([Parameter(Mandatory)][string]$Installer,
+    [ValidateSet('x64','x86','arm64')][string]$Architecture = 'x64')
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $app = Join-Path $env:ProgramFiles 'VPN20'
+if ($Architecture -eq 'x86' -and ${env:ProgramFiles(x86)}) { $app = Join-Path ${env:ProgramFiles(x86)} 'VPN20' }
 $data = Join-Path $env:ProgramData 'VPN20'
 $installed = $false
 try {
@@ -29,10 +31,41 @@ try {
     $peer = Invoke-RestMethod "$base/api/peers" -Method Post -ContentType 'application/json' -Headers $headers -WebSession $session -Body '{"name":"Windows release smoke"}'
     if (!$peer.id) { throw 'Peer creation failed' }
     $conf = Invoke-WebRequest "$base/api/peers/$($peer.id)/config" -Headers $headers -WebSession $session -UseBasicParsing
+    $status = Invoke-RestMethod "$base/api/status" -Headers $headers -WebSession $session
+    if ($status.backend -ne 'relay' -or $status.networkMode -ne 'relay' -or !$status.settings.clampMSS) { throw 'Fresh Windows installation did not enable the relay with MSS support' }
     $configText = $conf.Content
     if ($configText -is [byte[]]) { $configText = [System.Text.Encoding]::UTF8.GetString($configText) }
     if ($configText -notmatch '\[Interface\]') { throw 'Peer configuration export failed' }
     if ($configText -notmatch 'AllowedIPs = 10\.8\.0\.0/24' -or $configText -match '0\.0\.0\.0/0|(?m)^DNS =') { throw 'Fresh Windows devices must use peer routes and preserve local Internet/DNS' }
+    $qr = Invoke-WebRequest "$base/api/peers/$($peer.id)/qr.png" -Headers $headers -WebSession $session -UseBasicParsing
+    if ($qr.StatusCode -ne 200) { throw 'QR export failed' }
+    $null = Invoke-RestMethod "$base/api/peers/$($peer.id)/disable" -Method Post -ContentType 'application/json' -Headers $headers -WebSession $session -Body '{}'
+    $null = Invoke-RestMethod "$base/api/peers/$($peer.id)/enable" -Method Post -ContentType 'application/json' -Headers $headers -WebSession $session -Body '{}'
+    & "$app\vpn20.exe" stop-service
+    if ($LASTEXITCODE) { throw 'Service stop failed' }
+    if (Get-NetNat -Name VPN20 -ErrorAction SilentlyContinue) { throw 'VPN20 NAT was not cleaned up' }
+    Start-Service VPN20
+    for ($i=0; $i -lt 40; $i++) {
+        try { $null=Invoke-RestMethod "$base/api/health"; break } catch { Start-Sleep -Milliseconds 500 }
+    }
+    $null=Invoke-RestMethod "$base/api/auth/login" -Method Post -ContentType 'application/json' -Headers $headers -Body (@{username='releaseadmin';password='VPN20-release-test-only!82'} | ConvertTo-Json) -SessionVariable session
+    $saved = @(Invoke-RestMethod "$base/api/peers" -Headers $headers -WebSession $session)
+    if ($saved.Count -ne 1 -or $saved[0].id -ne $peer.id) { throw 'Service restart lost saved devices' }
+    # Upgrade in routed mode must preserve data and start without Internet NAT.
+    $networkSettings = Invoke-RestMethod "$base/api/settings" -Headers $headers -WebSession $session
+    $networkSettings.clampMSS = $false
+    $null = Invoke-RestMethod "$base/api/settings" -Method Put -ContentType 'application/json' -Headers $headers -WebSession $session -Body ($networkSettings | ConvertTo-Json)
+    & "$app\vpn20.exe" stop-service
+    if ($LASTEXITCODE) { throw 'Could not stop before changing network mode' }
+    $settings = Get-Content "$data\config.json" -Raw | ConvertFrom-Json
+    $settings | Add-Member -NotePropertyName VPN20_WINDOWS_NETWORK_MODE -NotePropertyValue routed -Force
+    $settings | ConvertTo-Json | Set-Content "$data\config.json" -Encoding utf8NoBOM
+    $p = Start-Process -FilePath $Installer -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-' -Wait -PassThru
+    if ($p.ExitCode -ne 0) { throw 'Installer upgrade failed' }
+    $null = Invoke-RestMethod "$base/api/auth/login" -Method Post -ContentType 'application/json' -Headers $headers -Body (@{username='releaseadmin';password='VPN20-release-test-only!82'} | ConvertTo-Json) -SessionVariable session
+    $status = Invoke-RestMethod "$base/api/status" -Headers $headers -WebSession $session
+    if ($status.networkMode -ne 'routed' -or !$status.networkWarning) { throw 'Installer did not start in routed mode' }
+    if (Get-NetNat -Name VPN20 -ErrorAction SilentlyContinue) { throw 'Routed mode unexpectedly enabled VPN20 NAT' }
     $helperPath = Join-Path $env:TEMP 'Enable-VPN20-PeerAccess.ps1'
     Invoke-WebRequest "$base/api/windows/peer-access.ps1" -Headers $headers -WebSession $session -UseBasicParsing -OutFile $helperPath
     $ps51 = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
@@ -51,32 +84,6 @@ try {
     & $ps51 -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $helperPath -Undo
     if ($LASTEXITCODE -or (Get-NetFirewallRule -Group 'VPN20 Peer Access' -ErrorAction SilentlyContinue)) { throw 'Peer access undo failed' }
     if ((Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server').fDenyTSConnections -ne $oldDeny) { throw 'Peer access undo did not restore RDP configuration' }
-    $qr = Invoke-WebRequest "$base/api/peers/$($peer.id)/qr.png" -Headers $headers -WebSession $session -UseBasicParsing
-    if ($qr.StatusCode -ne 200) { throw 'QR export failed' }
-    $null = Invoke-RestMethod "$base/api/peers/$($peer.id)/disable" -Method Post -ContentType 'application/json' -Headers $headers -WebSession $session -Body '{}'
-    $null = Invoke-RestMethod "$base/api/peers/$($peer.id)/enable" -Method Post -ContentType 'application/json' -Headers $headers -WebSession $session -Body '{}'
-    & "$app\vpn20.exe" stop-service
-    if ($LASTEXITCODE) { throw 'Service stop failed' }
-    if (Get-NetNat -Name VPN20 -ErrorAction SilentlyContinue) { throw 'VPN20 NAT was not cleaned up' }
-    Start-Service VPN20
-    for ($i=0; $i -lt 40; $i++) {
-        try { $null=Invoke-RestMethod "$base/api/health"; break } catch { Start-Sleep -Milliseconds 500 }
-    }
-    $null=Invoke-RestMethod "$base/api/auth/login" -Method Post -ContentType 'application/json' -Headers $headers -Body (@{username='releaseadmin';password='VPN20-release-test-only!82'} | ConvertTo-Json) -SessionVariable session
-    $saved = @(Invoke-RestMethod "$base/api/peers" -Headers $headers -WebSession $session)
-    if ($saved.Count -ne 1 -or $saved[0].id -ne $peer.id) { throw 'Service restart lost saved devices' }
-    # Upgrade in routed mode must preserve data and start without Internet NAT.
-    & "$app\vpn20.exe" stop-service
-    if ($LASTEXITCODE) { throw 'Could not stop before changing network mode' }
-    $settings = Get-Content "$data\config.json" -Raw | ConvertFrom-Json
-    $settings | Add-Member -NotePropertyName VPN20_WINDOWS_NETWORK_MODE -NotePropertyValue routed -Force
-    $settings | ConvertTo-Json | Set-Content "$data\config.json" -Encoding utf8NoBOM
-    $p = Start-Process -FilePath $Installer -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-' -Wait -PassThru
-    if ($p.ExitCode -ne 0) { throw 'Installer upgrade failed' }
-    $null = Invoke-RestMethod "$base/api/auth/login" -Method Post -ContentType 'application/json' -Headers $headers -Body (@{username='releaseadmin';password='VPN20-release-test-only!82'} | ConvertTo-Json) -SessionVariable session
-    $status = Invoke-RestMethod "$base/api/status" -Headers $headers -WebSession $session
-    if ($status.networkMode -ne 'routed' -or !$status.networkWarning) { throw 'Installer did not start in routed mode' }
-    if (Get-NetNat -Name VPN20 -ErrorAction SilentlyContinue) { throw 'Routed mode unexpectedly enabled VPN20 NAT' }
     # A service failure must make silent Setup fail, with actionable details.
     & "$app\vpn20.exe" stop-service
     if ($LASTEXITCODE) { throw 'Could not stop before testing a port conflict' }

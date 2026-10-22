@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -90,6 +91,12 @@ func newLogger(cfg *config.Config) *slog.Logger {
 }
 
 func openBackend(cfg *config.Config, log *slog.Logger) (wg.Backend, error) {
+	if runtime.GOOS == "windows" && cfg.Backend == "auto" {
+		if cfg.WindowsNetworkMode == "auto" || cfg.WindowsNetworkMode == "relay" {
+			return wg.NewUserspace(cfg.Iface, log)
+		}
+		return wg.NewKernel(cfg.Iface, log)
+	}
 	switch cfg.Backend {
 	case "mock":
 		log.Warn("using the mock data plane: no real tunnel will be created")

@@ -108,3 +108,20 @@ the kernel module should get within a few percent of line rate; with
 
 The dashboard's live rates come from the interface counters every two
 seconds, so they show what the tunnel actually carries during the test.
+
+## Windows relay
+
+Windows `auto` uses wireguard-go, Wintun and gVisor netstack to provide LAN and
+Internet access on Home/Pro/Server without relying on WinNAT. Peer packets
+are routed directly in memory; TCP/UDP egress is terminated in netstack and
+relayed with ordinary host sockets. Both sides apply their own routing/MTU
+and TCP congestion control. Peer SYN MSS is clamped when enabled.
+
+This adds copies, per-flow state and userspace encryption compared with the
+Linux kernel and native WireGuardNT paths; no line-rate claim has been made.
+It deliberately trades kernel forwarding speed for portable Windows egress.
+Queues and concurrent flows are bounded. Large UDP datagrams are reassembled
+and re-fragmented by netstack; TCP half-close is preserved. Revocation closes
+host-side sockets, and isolation is checked on every peer packet even when
+host firewall management is disabled. Native `routed`/`nat` remains available
+for deployments with suitable Windows networking and return routes.

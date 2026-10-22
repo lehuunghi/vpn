@@ -112,8 +112,8 @@ func FromEnv() (*Config, error) {
 	var errs []error
 	c := &Config{}
 	c.WindowsNetworkMode = strings.ToLower(env("VPN20_WINDOWS_NETWORK_MODE", "auto"))
-	if runtime.GOOS == "windows" && c.WindowsNetworkMode != "auto" && c.WindowsNetworkMode != "routed" && c.WindowsNetworkMode != "nat" {
-		errs = append(errs, errors.New("VPN20_WINDOWS_NETWORK_MODE: must be auto, routed or nat"))
+	if runtime.GOOS == "windows" && c.WindowsNetworkMode != "auto" && c.WindowsNetworkMode != "relay" && c.WindowsNetworkMode != "routed" && c.WindowsNetworkMode != "nat" {
+		errs = append(errs, errors.New("VPN20_WINDOWS_NETWORK_MODE: must be auto, relay, routed or nat"))
 	}
 	dataDefault, httpDefault := "/data", ":51821"
 	if runtime.GOOS == "windows" {
@@ -123,6 +123,9 @@ func FromEnv() (*Config, error) {
 	c.DataDir = env("VPN20_DATA_DIR", dataDefault)
 	c.DBPath = env("VPN20_DB", filepath.Join(c.DataDir, "vpn20.db"))
 	c.Backend = strings.ToLower(env("VPN20_BACKEND", "auto"))
+	if runtime.GOOS == "windows" && ((c.Backend == "kernel" && c.WindowsNetworkMode == "relay") || (c.Backend == "userspace" && c.WindowsNetworkMode != "auto" && c.WindowsNetworkMode != "relay")) {
+		errs = append(errs, errors.New("Windows relay requires VPN20_BACKEND=auto/userspace; routed/nat requires auto/kernel"))
+	}
 	switch c.Backend {
 	case "auto", "kernel", "userspace", "mock":
 	default:

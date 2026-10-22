@@ -15,7 +15,7 @@ export function roleLabel(role?: string): string {
 }
 
 export function backendLabel(backend: string): string {
-  return ({ kernel: "xử lý trong nhân", wireguardnt: "WireGuardNT trong nhân Windows", userspace: "xử lý trong không gian người dùng", mock: "chế độ mô phỏng" } as Record<string, string>)[backend] ?? backend;
+  return ({ kernel: "xử lý trong nhân", wireguardnt: "WireGuardNT trong nhân Windows", relay: "chuyển tiếp qua mạng máy chủ", userspace: "xử lý trong không gian người dùng", mock: "chế độ mô phỏng" } as Record<string, string>)[backend] ?? backend;
 }
 
 const errorMessages: Record<string, string> = {

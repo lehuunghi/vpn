@@ -70,3 +70,15 @@ type Backend interface {
 	// SetMTU changes the interface MTU without disturbing peers.
 	SetMTU(ctx context.Context, mtu int) error
 }
+
+// Forwarder is implemented by a backend that owns packet forwarding itself.
+// Its peer isolation is applied even when host firewall management is disabled.
+type Forwarder interface {
+	SetForwarding(ctx context.Context, cfg ForwardingConfig) error
+}
+
+type ForwardingConfig struct {
+	PeerIsolation bool
+	ClampMSS bool
+	Egress string
+}

@@ -144,7 +144,7 @@ export interface SysctlStatus {
 export interface Status {
 	platform: string;
   version: string;
-  backend: "kernel" | "userspace" | "wireguardnt" | "mock";
+  backend: "kernel" | "userspace" | "wireguardnt" | "relay" | "mock";
   interface: string;
   publicKey: string;
   listenPort: number;
@@ -153,7 +153,7 @@ export interface Status {
   subnet6?: string;
   egress?: string;
   firewallError?: string;
-  networkMode?: "nat" | "routed";
+  networkMode?: "nat" | "routed" | "relay";
   networkWarning?: string;
   firewallManaged: boolean;
   startedAt: string;

@@ -1,9 +1,15 @@
-param([string]$Version = (Get-Content "$PSScriptRoot\VERSION" -Raw).Trim())
+param(
+    [string]$Version = (Get-Content "$PSScriptRoot\VERSION" -Raw).Trim(),
+    [ValidateSet('x64','x86','arm64')][string]$Architecture = 'x64'
+)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 if ($Version -notmatch '^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?$') { throw 'Invalid release version' }
 $root = (Resolve-Path "$PSScriptRoot\..\..").Path
 Set-Location $root
+$env:GOOS = 'windows'
+$env:GOARCH = @{x64='amd64'; x86='386'; arm64='arm64'}[$Architecture]
+$env:CGO_ENABLED = '0'
 $stage = Join-Path $root 'dist\windows'
 $out = Join-Path $root 'dist\release'
 New-Item -ItemType Directory -Force $stage, $out | Out-Null
@@ -17,6 +23,21 @@ try {
     npm run build
     if ($LASTEXITCODE) { throw 'Frontend build failed' }
 } finally { Pop-Location }
+
+# Official signed Wintun provides the host's VPN interface in relay mode.
+$wintunArchive = Join-Path $root 'dist\wintun-0.14.1.zip'
+Invoke-WebRequest 'https://www.wintun.net/builds/wintun-0.14.1.zip' -OutFile $wintunArchive
+if ((Get-FileHash $wintunArchive -Algorithm SHA256).Hash -ne '07C256185D6EE3652E09FA55C0B673E2624B565E02C4B9091C79CA7D2F24EF51') { throw 'Wintun download checksum mismatch' }
+$wintunDirectory = Join-Path $root 'dist\wintun'
+Expand-Archive $wintunArchive -DestinationPath $wintunDirectory -Force
+$driverArchitecture = @{x64='amd64'; x86='x86'; arm64='arm64'}[$Architecture]
+$wintunDLL = Join-Path $wintunDirectory "wintun\bin\$driverArchitecture\wintun.dll"
+if ((Get-AuthenticodeSignature $wintunDLL).Status -ne 'Valid') { throw 'Wintun Authenticode validation failed' }
+Copy-Item $wintunDLL "$stage\wintun.dll"
+$wintunLicense = Join-Path $stage 'licenses\Wintun'
+New-Item -ItemType Directory -Force $wintunLicense | Out-Null
+Copy-Item (Join-Path $wintunDirectory 'wintun\LICENSE.txt') $wintunLicense
+$env:VPN20_WINTUN_DLL = "$stage\wintun.dll"
 
 go vet ./...
 if ($LASTEXITCODE) { throw 'go vet failed' }
@@ -36,8 +57,9 @@ $expected = 'DCEB30A9BC4BE48CCE0F74160FC88A585A2C2627366E8F846FC6658F9038DACE'
 if ((Get-FileHash $archive -Algorithm SHA256).Hash -ne $expected) { throw 'WireGuardNT download checksum mismatch' }
 $unpacked = Join-Path $root 'dist\wireguard-nt'
 Expand-Archive $archive -DestinationPath $unpacked -Force
-$dll = @(Get-ChildItem $unpacked -Recurse -Filter wireguard.dll | Where-Object { $_.Directory.Name -eq 'amd64' })
-if ($dll.Count -ne 1) { throw 'The official archive did not contain one AMD64 driver DLL' }
+$driverArchitecture = @{x64='amd64'; x86='x86'; arm64='arm64'}[$Architecture]
+$dll = @(Get-ChildItem $unpacked -Recurse -Filter wireguard.dll | Where-Object { $_.Directory.Name -eq $driverArchitecture })
+if ($dll.Count -ne 1) { throw "The official archive did not contain one $driverArchitecture driver DLL" }
 $signature = Get-AuthenticodeSignature $dll[0].FullName
 if ($signature.Status -ne 'Valid') { throw "WireGuardNT Authenticode validation failed: $($signature.Status)" }
 Copy-Item $dll[0].FullName "$stage\wireguard.dll"
@@ -92,7 +114,7 @@ if (!(Test-Path $iscc)) {
     choco install innosetup --yes --no-progress
     if ($LASTEXITCODE) { throw 'Inno Setup installation failed' }
 }
-& $iscc "/DVersion=$Version" "/DSourceDir=$stage" "/DOutputDir=$out" "$PSScriptRoot\vpn20.iss"
+& $iscc "/DVersion=$Version" "/DArchitecture=$Architecture" "/DSourceDir=$stage" "/DOutputDir=$out" "$PSScriptRoot\vpn20.iss"
 if ($LASTEXITCODE) { throw 'Windows installer build failed' }
-Compress-Archive -Path "$stage\*" -DestinationPath "$out\VPN20-$Version-windows-x64.zip" -Force
+Compress-Archive -Path "$stage\*" -DestinationPath "$out\VPN20-$Version-windows-$Architecture.zip" -Force
 Write-Output "Built Windows release $Version in $out"
