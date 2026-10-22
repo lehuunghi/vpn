@@ -18,6 +18,7 @@ import (
 	"golang.org/x/net/ipv6"
 	"golang.zx2c4.com/wireguard/conn"
 	"golang.zx2c4.com/wireguard/device"
+	"golang.zx2c4.com/wireguard/tun"
 	"golang.zx2c4.com/wireguard/tun/netstack"
 )
 
@@ -25,16 +26,37 @@ type relayClient struct {
 	net      *netstack.Net
 	key      wg.Key
 	ip4, ip6 netip.Addr
+	received chan []byte
 }
 
 type portableTestBind struct{ conn.Bind }
+
+// Observe authenticated packets before the client netstack consumes them. Its
+// PingConn can miss a notification when a reply arrives before Read registers.
+// The buffered observer validates actual replies without that timing dependency.
+type observedTUN struct {
+	tun.Device
+	received chan []byte
+}
+
+func (o *observedTUN) Write(bufs [][]byte, offset int) (int, error) {
+	for _, b := range bufs {
+		select {
+		case o.received <- append([]byte(nil), b[offset:]...):
+		default:
+		}
+	}
+	return o.Device.Write(bufs, offset)
+}
 
 // Two clients exchange real encrypted WireGuard traffic over host UDP sockets.
 // Windows also verifies Wintun host access; Linux needs no driver/elevation.
 // Neither path needs WinNAT or a public Internet endpoint.
 func TestRelayEncryptedTraffic(t *testing.T) {
 	prepareRelayTest(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
+	// A fresh Windows ARM64 runner can spend over 40 seconds installing its
+	// first driver and provisioning firewall rules before packets are tested.
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 	be, err := wg.NewRelay("relay-test", slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err != nil {
@@ -66,7 +88,8 @@ func TestRelayEncryptedTraffic(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		d := device.NewDevice(tun, &portableTestBind{conn.NewDefaultBind()}, device.NewLogger(device.LogLevelError, "relay-client: "))
+		observed := &observedTUN{Device: tun, received: make(chan []byte, 1024)}
+		d := device.NewDevice(observed, &portableTestBind{conn.NewDefaultBind()}, device.NewLogger(device.LogLevelError, "relay-client: "))
 		t.Cleanup(d.Close)
 		pub := key.PublicKey()
 		text := fmt.Sprintf("private_key=%s\npublic_key=%s\npreshared_key=%x\nendpoint=127.0.0.1:%d\nallowed_ip=0.0.0.0/0\nallowed_ip=::/0\n", hex.EncodeToString(priv[:]), hex.EncodeToString(pub[:]), psk[:], state.ListenPort)
@@ -76,12 +99,12 @@ func TestRelayEncryptedTraffic(t *testing.T) {
 		if err = d.Up(); err != nil {
 			t.Fatal(err)
 		}
-		clients = append(clients, relayClient{client, priv, ip4, ip6})
+		clients = append(clients, relayClient{net: client, key: priv, ip4: ip4, ip6: ip6, received: observed.received})
 	}
 	// Both roaming endpoints must first authenticate to the server, as normal
 	// WireGuard clients do with their PersistentKeepalive setting.
 	for _, client := range clients {
-		relayPing(t, client.net, netip.MustParseAddr("10.254.249.1"))
+		relayPing(t, client, netip.MustParseAddr("10.254.249.1"))
 	}
 	checkRelayHostAccess(t, clients[0])
 
@@ -129,10 +152,10 @@ func TestRelayEncryptedTraffic(t *testing.T) {
 			defer c.Close()
 			roundTrip(t, c, []byte("VPN20 peer UDP"))
 		})
-		t.Run("peer ping "+ip.String(), func(t *testing.T) { relayPing(t, clients[0].net, ip) })
+		t.Run("peer ping "+ip.String(), func(t *testing.T) { relayPing(t, clients[0], ip) })
 	}
 	for _, ip := range []netip.Addr{netip.MustParseAddr("10.254.249.1"), netip.MustParseAddr("fd20:249::1")} {
-		t.Run("server ping "+ip.String(), func(t *testing.T) { relayPing(t, clients[0].net, ip) })
+		t.Run("server ping "+ip.String(), func(t *testing.T) { relayPing(t, clients[0], ip) })
 	}
 	var host netip.Addr
 	if c, err := net.Dial("udp4", "192.0.2.1:9"); err == nil {
@@ -227,27 +250,14 @@ func TestRelayEncryptedTraffic(t *testing.T) {
 			t.Fatal(err)
 		}
 		for _, ip := range []netip.Addr{clients[1].ip4, clients[1].ip6} {
-			c, err := clients[0].net.DialPingAddr(netip.Addr{}, ip)
-			if err != nil {
-				t.Fatal(err)
-			}
-			_ = c.SetDeadline(time.Now().Add(200 * time.Millisecond))
-			var typ icmp.Type = ipv4.ICMPTypeEcho
-			if ip.Is6() {
-				typ = ipv6.ICMPTypeEchoRequest
-			}
-			packet, _ := (&icmp.Message{Type: typ, Body: &icmp.Echo{ID: 0x2020, Seq: 1, Data: []byte("isolated")}}).Marshal(nil)
-			_, _ = c.Write(packet)
-			b := make([]byte, 100)
-			if _, err = c.Read(b); err == nil {
+			if pingReply(t, clients[0], ip, 200*time.Millisecond) {
 				t.Fatal("isolated peers can still exchange packets")
 			}
-			_ = c.Close()
 		}
 		if err := forwarder.SetForwarding(ctx, wg.ForwardingConfig{ClampMSS: true}); err != nil {
 			t.Fatal(err)
 		}
-		relayPing(t, clients[0].net, clients[1].ip4)
+		relayPing(t, clients[0], clients[1].ip4)
 	})
 	state, err = be.Device(ctx)
 	if err != nil || len(state.Peers) != 2 || state.Peers[0].LastHandshake.IsZero() || state.Peers[0].ReceiveBytes == 0 || state.Peers[0].TransmitBytes == 0 {
@@ -285,25 +295,51 @@ func roundTrip(t *testing.T, c net.Conn, payload []byte) {
 	}
 }
 
-func relayPing(t *testing.T, client *netstack.Net, ip netip.Addr) {
+func relayPing(t *testing.T, client relayClient, ip netip.Addr) {
 	t.Helper()
-	c, err := client.DialPingAddr(netip.Addr{}, ip)
+	if !pingReply(t, client, ip, 5*time.Second) {
+		t.Fatalf("no authenticated echo reply from %s", ip)
+	}
+}
+
+func pingReply(t *testing.T, client relayClient, ip netip.Addr, timeout time.Duration) bool {
+	t.Helper()
+	c, err := client.net.DialPingAddr(netip.Addr{}, ip)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer c.Close()
-	_ = c.SetDeadline(time.Now().Add(5 * time.Second))
 	var typ icmp.Type = ipv4.ICMPTypeEcho
 	if ip.Is6() {
 		typ = ipv6.ICMPTypeEchoRequest
 	}
-	msg, _ := (&icmp.Message{Type: typ, Body: &icmp.Echo{ID: 0x2020, Seq: 1, Data: []byte("encrypted ping")}}).Marshal(nil)
+	payload := []byte(fmt.Sprintf("encrypted ping %d", time.Now().UnixNano()))
+	msg, _ := (&icmp.Message{Type: typ, Body: &icmp.Echo{ID: 0x2020, Seq: 1, Data: payload}}).Marshal(nil)
 	if _, err = c.Write(msg); err != nil {
 		t.Fatal(err)
 	}
-	buf := make([]byte, 1500)
-	n, err := c.Read(buf)
-	if err != nil || n < 8 || !bytes.Equal(buf[8:n], []byte("encrypted ping")) {
-		t.Fatalf("ping %s: %x %v", ip, buf[:n], err)
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	for {
+		select {
+		case <-timer.C:
+			return false
+		case packet := <-client.received:
+			offset, replyType := 20, byte(0)
+			if ip.Is6() {
+				offset, replyType = 40, 129
+				if len(packet) < 48 || packet[0]>>4 != 6 || packet[6] != 58 || netip.AddrFrom16([16]byte(packet[8:24])) != ip {
+					continue
+				}
+			} else {
+				if len(packet) < 28 || packet[0]>>4 != 4 || packet[9] != 1 || netip.AddrFrom4([4]byte(packet[12:16])) != ip {
+					continue
+				}
+				offset = int(packet[0]&15) * 4
+			}
+			if len(packet) >= offset+8 && packet[offset] == replyType && bytes.Equal(packet[offset+8:], payload) {
+				return true
+			}
+		}
 	}
 }

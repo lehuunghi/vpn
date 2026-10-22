@@ -524,7 +524,10 @@ func (r *Router) copySession(s *session, datagram bool) {
 	r.sessions[s] = true
 	r.mu.Unlock()
 	defer func() { r.mu.Lock(); delete(r.sessions, s); r.mu.Unlock(); s.close() }()
-	idle := 5 * time.Minute
+	// Long idle RDP/SSH sessions must survive normal work breaks. Host TCP
+	// keepalives detect a dead uplink; revocation and the session limit bound
+	// retained state independently of application traffic.
+	idle := 24 * time.Hour
 	if datagram {
 		idle = 2 * time.Minute
 	}

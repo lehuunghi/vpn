@@ -3,9 +3,10 @@
 package wg
 
 import (
+	"net/netip"
+
 	"github.com/lehuunghi/vpn/internal/relay"
 	"golang.zx2c4.com/wireguard/conn"
-	"net/netip"
 )
 
 // The relay does not change host routes. Avoid wireguard-go's optional Linux

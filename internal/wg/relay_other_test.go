@@ -3,8 +3,9 @@
 package wg_test
 
 import (
-	"github.com/lehuunghi/vpn/internal/wg"
 	"testing"
+
+	"github.com/lehuunghi/vpn/internal/wg"
 )
 
 func prepareRelayTest(t *testing.T)                             {}

@@ -85,7 +85,7 @@ hạn 64 yêu cầu đồng thời; ICMP echo phân mảnh ra ngoài bị loại
 phản hồi giả. TCP/UDP phân mảnh được netstack tái lắp.
 
 Relay giới hạn 4096 phiên TCP/UDP/ICMP đang xử lý, hàng đợi gói hữu hạn;
-UDP đóng sau 2 phút không hoạt động, TCP sau 5 phút không hoạt động. Ứng dụng
+UDP đóng sau 2 phút không hoạt động, TCP sau 24 giờ không hoạt động. Ứng dụng
 cần phiên TCP nhàn rỗi lâu nên gửi keepalive ở mức ứng dụng. Khóa/xóa/hết hạn
 thiết bị loại peer khỏi WireGuard và đóng phiên relay của thiết bị đó.
 

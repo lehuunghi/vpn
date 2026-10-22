@@ -4,8 +4,6 @@ package wg_test
 
 import (
 	"context"
-	"github.com/lehuunghi/vpn/internal/netcfg"
-	"github.com/lehuunghi/vpn/internal/wg"
 	"io"
 	"net"
 	"net/netip"
@@ -14,6 +12,9 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/lehuunghi/vpn/internal/netcfg"
+	"github.com/lehuunghi/vpn/internal/wg"
 )
 
 func prepareRelayTest(t *testing.T) {

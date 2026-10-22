@@ -20,7 +20,7 @@ import (
 	"golang.zx2c4.com/wireguard/tun/netstack"
 )
 
-func testRouter(t *testing.T) (*Router, *netstack.Net) {
+func testRouter(t *testing.T) (*Router, *netstack.Net, <-chan []byte) {
 	t.Helper()
 	r, err := New("test-relay", []netip.Prefix{netip.MustParsePrefix("10.20.0.1/24"), netip.MustParsePrefix("fd20::1/64")}, 1420)
 	if err != nil {
@@ -31,6 +31,7 @@ func testRouter(t *testing.T) (*Router, *netstack.Net) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	packets := make(chan []byte, 1024)
 	bridge := func(dst, src tun.Device) {
 		b := make([]byte, 65535)
 		for {
@@ -38,6 +39,12 @@ func testRouter(t *testing.T) (*Router, *netstack.Net) {
 			_, err := src.Read([][]byte{b}, sizes, 0)
 			if err != nil {
 				return
+			}
+			if src == r {
+				select {
+				case packets <- append([]byte(nil), b[:sizes[0]]...):
+				default:
+				}
 			}
 			if _, err = dst.Write([][]byte{b[:sizes[0]]}, 0); err != nil {
 				return
@@ -47,7 +54,7 @@ func testRouter(t *testing.T) (*Router, *netstack.Net) {
 	go bridge(r, client)
 	go bridge(client, r)
 	t.Cleanup(func() { _ = client.Close(); _ = r.Close() })
-	return r, n
+	return r, n, packets
 }
 
 // Loopback listeners make this runnable in an isolated build container. Only
@@ -56,7 +63,7 @@ func testRouter(t *testing.T) (*Router, *netstack.Net) {
 func TestHostRelayBothFamilies(t *testing.T) {
 	for _, family := range []string{"4", "6"} {
 		t.Run(family, func(t *testing.T) {
-			r, client := testRouter(t)
+			r, client, _ := testRouter(t)
 			loopback, remote := "127.0.0.1", netip.MustParseAddr("203.0.113.5")
 			if family == "6" {
 				loopback, remote = "::1", netip.MustParseAddr("2001:db8::5")
@@ -174,7 +181,7 @@ func TestHostRelayBothFamilies(t *testing.T) {
 
 func TestEchoRequiresRealSuccess(t *testing.T) {
 	for _, is6 := range []bool{false, true} {
-		r, client := testRouter(t)
+		r, client, packets := testRouter(t)
 		remote := netip.MustParseAddr("203.0.113.8")
 		var typ icmp.Type = ipv4.ICMPTypeEcho
 		if is6 {
@@ -195,19 +202,23 @@ func TestEchoRequiresRealSuccess(t *testing.T) {
 			t.Fatal(err)
 		}
 		packet, _ := (&icmp.Message{Type: typ, Body: &icmp.Echo{ID: 1, Seq: 2, Data: []byte("probe")}}).Marshal(nil)
-		_ = c.SetDeadline(time.Now().Add(100 * time.Millisecond))
 		_, _ = c.Write(packet)
-		buf := make([]byte, 1500)
-		if _, err = c.Read(buf); err == nil {
-			t.Fatal("unreachable destination produced an echo reply")
+		select {
+		case <-packets:
+			t.Fatal("unreachable destination produced a reply")
+		case <-time.After(100 * time.Millisecond):
 		}
-		_ = c.SetDeadline(time.Now().Add(2 * time.Second))
 		_, _ = c.Write(packet)
-		n, err := c.Read(buf)
+		select {
+		case reply := <-packets:
+			info, ok := inspectPacket(reply)
+			if !ok || info.src != remote || len(reply) < info.offset+8 || !bytes.Equal(reply[info.offset+8:], []byte("probe")) {
+				t.Fatalf("invalid real echo reply: %x", reply)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("real echo success produced no reply")
+		}
 		_ = c.Close()
-		if err != nil || n < 8 || !bytes.Equal(buf[8:n], []byte("probe")) {
-			t.Fatalf("real echo reply: %x %v", buf[:n], err)
-		}
 	}
 }
 

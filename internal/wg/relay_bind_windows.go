@@ -4,14 +4,15 @@ package wg
 
 import (
 	"fmt"
+	"net/netip"
+	"os"
+	"path/filepath"
+
 	"github.com/lehuunghi/vpn/internal/relay"
 	"golang.org/x/sys/windows"
 	"golang.zx2c4.com/wireguard/conn"
 	"golang.zx2c4.com/wireguard/tun"
 	"golang.zx2c4.com/wireguard/windows/tunnel/winipcfg"
-	"net/netip"
-	"os"
-	"path/filepath"
 )
 
 func newRelayBind() conn.Bind { return conn.NewDefaultBind() }
