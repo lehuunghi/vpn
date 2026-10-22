@@ -218,7 +218,7 @@ func FromEnv() (*Config, error) {
 	}
 	c.InitialEndpoint = env("VPN20_ENDPOINT", "")
 	c.DDNSAPI = env("VPN20_DDNS_API", "https://ddns.20.com.vn")
-	c.DDNSHTTPS = env("VPN20_DDNS_HTTPS", ":443")
+	c.DDNSHTTPS = env("VPN20_DDNS_HTTPS", ":8443")
 	c.DDNSACMECA = env("VPN20_DDNS_ACME_CA", "")
 	c.InitialDNS = env("VPN20_DNS", "1.1.1.1, 1.0.0.1")
 	if c.ManageFirewall, err = envBool("VPN20_MANAGE_FIREWALL", true); err != nil {

@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -18,7 +19,7 @@ import (
 
 const Domain = "vpn.20.com.vn"
 const DefaultAPI = "https://ddns.20.com.vn"
-const DefaultHTTPS = ":443"
+const DefaultHTTPS = ":8443"
 
 type apiError struct {
 	Status        int
@@ -46,7 +47,9 @@ func newBroker(base string) (*broker, error) {
 			DialContext: func(ctx context.Context, _, address string) (net.Conn, error) {
 				return dialer.DialContext(ctx, network, address)
 			}}
-		*target = &http.Client{Transport: transport, Timeout: 15 * time.Second,
+		// A paired update or DNS-01 cleanup makes several Cloudflare requests.
+		// Do not abandon it after 15s while the Worker is still processing it.
+		*target = &http.Client{Transport: transport, Timeout: 60 * time.Second,
 			CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}
 	}
 	return b, nil
@@ -78,7 +81,7 @@ func (b *broker) call(ctx context.Context, client *http.Client, method, path, to
 	}
 	response, err := client.Do(request)
 	if err != nil {
-		return errors.New("Không kết nối được dịch vụ DDNS; kiểm tra Internet và địa chỉ API")
+		return b.connectionError(err, method, path)
 	}
 	defer response.Body.Close()
 	data, err = io.ReadAll(io.LimitReader(response.Body, 64<<10))
@@ -86,35 +89,13 @@ func (b *broker) call(ctx context.Context, client *http.Client, method, path, to
 		return errors.New("Không đọc được phản hồi DDNS")
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		var result struct{ Error, Message string }
+		var result struct{ Error string }
 		_ = json.Unmarshal(data, &result)
-		if response.StatusCode == 404 || response.StatusCode == 405 {
-			return &apiError{response.StatusCode, "worker_upgrade", "Cần cập nhật Worker DDNS lên phiên bản hỗ trợ đăng ký máy và SSL"}
-		}
 		// Only forward the known broker error vocabulary, never arbitrary HTML/body.
-		message := "Dịch vụ DDNS báo lỗi; thử lại sau"
-		switch result.Error {
-		case "name_taken":
-			message = "Tên subdomain đã được sử dụng"
-		case "claim_limit":
-			message = "Mạng này đã đạt hạn mức đăng ký trong ngày"
-		case "capacity":
-			message = "Dịch vụ đã đạt hạn mức hostname"
-		case "unauthorized":
-			message = "Khóa máy không hợp lệ hoặc đã bị thu hồi"
-		case "registration_disabled":
-			message = "Dịch vụ đã tắt đăng ký tự động"
-		case "dns_record_conflict":
-			message = "Tên có bản ghi DNS ngoài quyền quản lý; cần quản trị viên kiểm tra"
-		case "dns_api_error":
-			message = "Worker không cập nhật được Cloudflare DNS; kiểm tra quyền và hạn mức"
-		case "rate_limited", "acme_busy", "acme_limit", "busy":
-			message = "Dịch vụ đang bận; sẽ tự thử lại"
-		}
-		return &apiError{response.StatusCode, result.Error, message}
+		return b.responseError(response.StatusCode, result.Error, method, path)
 	}
 	if output != nil && json.Unmarshal(data, output) != nil {
-		return errors.New("Dịch vụ DDNS trả dữ liệu không hợp lệ")
+		return fmt.Errorf("API DDNS không trả JSON hợp lệ; kiểm tra Custom Domain, Cloudflare Access/WAF (%s)", b.location(method, path))
 	}
 	return nil
 }
@@ -149,14 +130,17 @@ func (b *broker) sync(ctx context.Context, token string) (string, string, error)
 		}(family, client)
 	}
 	addresses := map[int]string{}
+	failures := map[int]error{}
 	for range 2 {
 		r := <-replies
 		if r.err == nil {
 			addresses[r.family] = r.value.IP
+		} else {
+			failures[r.family] = r.err
 		}
 	}
 	if len(addresses) == 0 {
-		return "", "", errors.New("Không xác định được IP Internet của máy chủ")
+		return "", "", fmt.Errorf("Không xác định được IP Internet. IPv4: %v; IPv6: %v", failures[4], failures[6])
 	}
 	input := map[string]any{}
 	for family, field := range map[int]string{4: "ipv4", 6: "ipv6"} {

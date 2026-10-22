@@ -1,13 +1,14 @@
-# VPN20 DDNS Worker 0.2.0
+# VPN20 DDNS Worker 0.2.1
 
 API cho **ten.vpn.20.com.vn**. Xem [hướng dẫn](../../docs/subdomain.md).
 Không có token Cloudflare thật trong mã nguồn.
 
-## Nâng từ 0.1.0
+## Nâng từ 0.1.0 / 0.2.0
 
 Giữ D1/binding/secrets/domain hiện có. Sao lưu D1, chạy **schema.sql** mới trong
 D1 Console, dán toàn bộ **src/index.js** vào Worker rồi Deploy. Không xóa bảng
-hosts. GET /health phải có version 0.2.0. Với Wrangler, thay database_id và
+hosts. Worker tự bổ sung các bảng phụ còn thiếu của bản 0.1.0; database mới
+vẫn cần schema.sql. GET /health phải có ok: true, version 0.2.1. Với Wrangler, thay database_id và
 CF_ZONE_ID trong wrangler.jsonc rồi chạy:
 
 ~~~sh
@@ -23,7 +24,7 @@ ddns.20.com.vn. Không đưa secret vào wrangler.jsonc hay máy VPN.
 
 | Endpoint | Quyền | Chức năng |
 | --- | --- | --- |
-| GET /health | Công khai | Cấu hình/phiên bản, không thử DNS/NAT |
+| GET /health | Công khai | Cấu hình/phiên bản và schema D1; không thử quyền CF/DNS/NAT |
 | GET /v1/ip | Công khai | IP nguồn CF-Connecting-IP |
 | POST /v1/claim | Khóa máy 64 hex, client tự tạo/lưu trước | JSON name, cấp tên; idempotent cùng khóa/tên |
 | POST /v1/update | Khóa hostname | JSON ip cũ hoặc ipv4/ipv6; null xóa họ IP |
@@ -59,3 +60,16 @@ node --test tests/api.test.js
 
 Tests dùng SQLite thật cho D1 và giả lập HTTP API Cloudflare. Sau triển khai,
 thử thực tế bằng VPN20 và mạng 4G/5G.
+
+## Khi báo lỗi
+
+- **not_configured**: kiểm tra binding DB, CF_ZONE_ID và Secrets CF_API_TOKEN/ADMIN_TOKEN.
+- **schema_outdated**: sai/thiếu bảng hoặc cột; chạy schema.sql trên đúng D1 đang gắn DB.
+- **database_unavailable**: D1 không truy cập được hoặc hết quota; health không báo sẵn sàng.
+- **dns_auth_error / dns_zone_error**: kiểm tra quyền token và Zone ID của 20.com.vn.
+- **dns_api_unavailable**: kết nối Worker → Cloudflare lỗi/timeout; thử lại.
+
+API trung tâm vẫn là https://ddns.20.com.vn (443). Trang quản trị VPN20 dùng
+https://ten.vpn.20.com.vn:8443, cần NAT/firewall TCP 8443 riêng. DNS-01 không
+cần mở cổng vào 80/443. Không đặt Cloudflare Access/trang challenge tương tác
+trước API nếu chưa có chính sách cho phép máy VPN gọi trực tiếp.

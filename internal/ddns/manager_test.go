@@ -338,8 +338,8 @@ func TestOccupiedHTTPSPortDoesNotClaimName(t *testing.T) {
 	}
 }
 func TestLabelAndHTTPSDefaults(t *testing.T) {
-	if DefaultHTTPS != ":443" {
-		t.Fatal("default must be port 443")
+	if DefaultHTTPS != ":8443" {
+		t.Fatal("default must be port 8443")
 	}
 	for _, value := range []string{"", "-bad", "bad-", "a.b", "office.vpn.20.com.vn", "admin", strings.Repeat("a", 64)} {
 		if _, err := Label(value); err == nil {

@@ -32,7 +32,7 @@ jobs:
       - name: Verify and package Worker sources
         run: |
           node --test deploy/ddns-worker/tests/api.test.js
-          (cd deploy/ddns-worker && zip -r ../../dist/release/VPN20-DDNS-Worker-0.2.0.zip src tests schema.sql package.json wrangler.jsonc README.md)
+          (cd deploy/ddns-worker && zip -r ../../dist/release/VPN20-DDNS-Worker-0.2.1.zip src tests schema.sql package.json wrangler.jsonc README.md)
       - name: Verify real systemd installation, update and rollback
         if: matrix.arch == 'amd64'
         run: |

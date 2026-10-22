@@ -47,7 +47,7 @@ jobs:
           bash packaging/linux/build.sh amd64
           bash packaging/linux/build.sh arm64
           node --test deploy/ddns-worker/tests/api.test.js
-          (cd deploy/ddns-worker && zip -r ../../dist/release/VPN20-DDNS-Worker-0.2.0.zip src tests schema.sql package.json wrangler.jsonc README.md)
+          (cd deploy/ddns-worker && zip -r ../../dist/release/VPN20-DDNS-Worker-0.2.1.zip src tests schema.sql package.json wrangler.jsonc README.md)
       - name: Verify Linux installation, upgrade and rollback
         run: |
           sudo apt-get update -qq
