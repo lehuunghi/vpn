@@ -246,10 +246,16 @@ khác hostname A/DNS-only dùng làm endpoint WireGuard.
    lệnh `cloudflared service install <TUNNEL_TOKEN>` từ dashboard với quyền
    quản trị để tự chạy khi bật máy. Thêm `VPN20_SECURE_COOKIES=true` vào cấu
    hình VPN20 và restart; truy cập trang bằng URL HTTPS.
-5. Docker: lưu tunnel token vào `secrets/cloudflare-tunnel-token.txt`, giữ
-   thư mục 0700/file 0600. Chạy:
+5. Docker: lưu tunnel token vào `secrets/cloudflare-tunnel-token.txt`. Image
+   Cloudflared chạy bằng user 65532, nên file token cần đọc được trong
+   container. Giữ thư mục `secrets` trên host ở mode 0700, rồi đặt riêng
+   file tunnel token ở mode 0644; người dùng host khác vẫn không đi qua
+   được thư mục 0700. Token DNS của VPN20 tiếp tục dùng mode 0600. Compose
+   dùng bind mount cho secret dạng file, không tự ánh xạ lại uid/mode:
 
 ```sh
+chmod 700 secrets
+chmod 644 secrets/cloudflare-tunnel-token.txt
 docker compose -f docker-compose.yml -f docker-compose.tunnel.yml up -d --no-build
 # Kết hợp DDNS cho endpoint VPN và cập nhật nếu cần:
 docker compose -f docker-compose.yml -f docker-compose.cloudflare.yml -f docker-compose.tunnel.yml -f docker-compose.update.yml up -d --no-build

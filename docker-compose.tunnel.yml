@@ -1,6 +1,8 @@
 # Optional HTTPS administration through Cloudflare Tunnel, including CGNAT.
 # Configure the public hostname's origin as http://vpn20:51821 in Cloudflare.
 # Use a different hostname from the DNS-only WireGuard endpoint.
+# cloudflared runs as UID 65532. The host token file must be readable by it;
+# use mode 0644 inside a host secrets directory with mode 0700 (see the guide).
 services:
   vpn20:
     environment:
