@@ -17,7 +17,8 @@ function Set-VPN20Network {
     # unexpected process exit. Never overwrite the original snapshot on restart.
     $states = @()
     if (Test-Path -LiteralPath $StatePath) {
-        $states = @(Get-Content -Raw -LiteralPath $StatePath | ConvertFrom-Json)
+        $snapshot = Get-Content -Raw -LiteralPath $StatePath | ConvertFrom-Json
+        $states = @($snapshot.Interfaces)
     }
     $rows = @(Get-NetIPInterface -InterfaceAlias $Uplink -PolicyStore ActiveStore)
     foreach ($row in $rows) {
@@ -26,7 +27,11 @@ function Set-VPN20Network {
         }
     }
     $null = New-Item -ItemType Directory -Force -Path (Split-Path -Parent $StatePath)
-    ConvertTo-Json -InputObject @($states) | Set-Content -LiteralPath $StatePath -Encoding UTF8
+    # An object envelope avoids Windows PowerShell 5.1 adding another array
+    # level each time a JSON array is passed through ConvertFrom-Json.
+    [pscustomobject]@{Version=1; Interfaces=@($states)} | ConvertTo-Json -Depth 5 |
+        Set-Content -LiteralPath ($StatePath + '.tmp') -Encoding UTF8
+    Move-Item -LiteralPath ($StatePath + '.tmp') -Destination $StatePath -Force
     $rows | Set-NetIPInterface -Forwarding Enabled -PolicyStore ActiveStore
     if (!$existing) {
         $null = New-NetNat -Name 'VPN20' -InternalIPInterfaceAddressPrefix $Subnet
@@ -41,8 +46,12 @@ function Remove-VPN20Network {
     Get-NetNat -Name 'VPN20' -ErrorAction SilentlyContinue | Remove-NetNat -Confirm:$false
     Get-NetFirewallRule -Group 'VPN20' -ErrorAction SilentlyContinue | Remove-NetFirewallRule
     if (Test-Path -LiteralPath $StatePath) {
-        $states = @(Get-Content -Raw -LiteralPath $StatePath | ConvertFrom-Json)
+        $snapshot = Get-Content -Raw -LiteralPath $StatePath | ConvertFrom-Json
+        $states = @($snapshot.Interfaces)
         foreach ($state in $states) {
+            if ($null -eq $state -or $null -eq $state.InterfaceIndex -or !$state.AddressFamily) {
+                throw 'VPN20 forwarding-state file is invalid; original forwarding settings were not overwritten.'
+            }
             $row = Get-NetIPInterface -InterfaceIndex $state.InterfaceIndex -AddressFamily $state.AddressFamily -ErrorAction SilentlyContinue
             if ($row -and $row.InterfaceAlias -eq $state.InterfaceAlias) {
                 $row | Set-NetIPInterface -Forwarding $state.Forwarding -PolicyStore ActiveStore
