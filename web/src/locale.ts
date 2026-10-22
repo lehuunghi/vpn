@@ -161,6 +161,7 @@ const auditActions: Record<string, string> = {
   "peer.keys_rotated": "Thay khóa thiết bị",
   "peer.config_viewed": "Xem cấu hình thiết bị",
   "settings.updated": "Cập nhật cài đặt",
+	"system.update": "Cập nhật phiên bản chương trình",
 };
 
 export function auditAction(action: string): string {

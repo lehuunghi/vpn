@@ -31,10 +31,7 @@ Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
 PrivilegesRequired=admin
-#if Architecture == "arm64"
-ArchitecturesAllowed=arm64
-ArchitecturesInstallIn64BitMode=arm64
-#elif Architecture == "x64"
+#if Architecture == "x64"
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 #else
@@ -44,6 +41,11 @@ MinVersion=10.0.14393
 CloseApplications=no
 RestartApplications=no
 SetupLogging=yes
+#ifdef SignedBuild
+SignTool=vpn20sign
+SignedUninstaller=yes
+SignToolRetryCount=3
+#endif
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"

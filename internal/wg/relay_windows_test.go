@@ -52,6 +52,52 @@ func prepareRelayNetwork(t *testing.T, be wg.Backend, port int) {
 
 func checkRelayHostAccess(t *testing.T, client relayClient) {
 	t.Helper()
+	// Exercise unsolicited connections into services bound to the VPN address,
+	// in addition to connections initiated by the Windows host below.
+	for _, ip := range []netip.Addr{netip.MustParseAddr("10.254.249.1"), netip.MustParseAddr("fd20:249::1")} {
+		t.Run("VPN device to host TCP "+ip.String(), func(t *testing.T) {
+			ln, err := net.ListenTCP("tcp", net.TCPAddrFromAddrPort(netip.AddrPortFrom(ip, 0)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer ln.Close()
+			go func() {
+				c, err := ln.Accept()
+				if err == nil {
+					defer c.Close()
+					_, _ = io.Copy(c, c)
+				}
+			}()
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			c, err := client.net.DialContextTCPAddrPort(ctx, netip.AddrPortFrom(ip, uint16(ln.Addr().(*net.TCPAddr).Port)))
+			if err != nil {
+				t.Fatalf("VPN device cannot reach a Windows host TCP service: %v", err)
+			}
+			defer c.Close()
+			roundTrip(t, c, []byte("VPN device to Windows host TCP"))
+		})
+		t.Run("VPN device to host UDP "+ip.String(), func(t *testing.T) {
+			ln, err := net.ListenUDP("udp", net.UDPAddrFromAddrPort(netip.AddrPortFrom(ip, 0)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer ln.Close()
+			go func() {
+				buf := make([]byte, 1500)
+				n, from, err := ln.ReadFromUDP(buf)
+				if err == nil {
+					_, _ = ln.WriteToUDP(buf[:n], from)
+				}
+			}()
+			c, err := client.net.DialUDPAddrPort(netip.AddrPort{}, netip.AddrPortFrom(ip, uint16(ln.LocalAddr().(*net.UDPAddr).Port)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer c.Close()
+			roundTrip(t, c, []byte("VPN device to Windows host UDP"))
+		})
+	}
 	for _, ip := range []netip.Addr{client.ip4, client.ip6} {
 		ln, err := client.net.ListenTCPAddrPort(netip.AddrPortFrom(ip, 3388))
 		if err != nil {

@@ -15,13 +15,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
-	"unicode/utf16"
 
 	"github.com/lehuunghi/vpn/internal/netcfg"
 	"github.com/lehuunghi/vpn/internal/wg"
@@ -29,7 +26,6 @@ import (
 	"golang.zx2c4.com/wireguard/conn"
 	"golang.zx2c4.com/wireguard/device"
 	"golang.zx2c4.com/wireguard/tun"
-	"golang.zx2c4.com/wireguard/windows/driver"
 )
 
 // These tests require elevation and the released, signed WireGuardNT DLL.
@@ -50,7 +46,7 @@ func TestWindowsNativeTunnel(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("VPN20_DATA_DIR", t.TempDir())
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	be, err := wg.NewKernel("vpn20test", slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err != nil {
@@ -74,15 +70,6 @@ func TestWindowsNativeTunnel(t *testing.T) {
 			t.Error(err)
 		}
 	})
-	// Include the native driver's reason for discarded packets in CI failures.
-	adapter, err := driver.OpenAdapter("vpn20test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = adapter.Close() })
-	if err := adapter.SetLogging(driver.AdapterLogOn); err != nil {
-		t.Fatal(err)
-	}
 	egress, err := netcfg.DefaultEgress()
 	if err != nil {
 		t.Fatal(err)
@@ -106,9 +93,6 @@ func TestWindowsNativeTunnel(t *testing.T) {
 		}
 	}
 	apply()
-	// Register after network cleanup so filters still exist when a failed test
-	// records their IDs and conditions (testing cleanups run in reverse order).
-	nativePacketDiagnostics(t)
 
 	newClient := func(ip string) *memoryTUN {
 		priv, err := wg.GeneratePrivateKey()
@@ -140,7 +124,6 @@ func TestWindowsNativeTunnel(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer listener.Close()
-	var echoRequests atomic.Int64
 	go func() {
 		buf := make([]byte, 1500)
 		for {
@@ -148,23 +131,9 @@ func TestWindowsNativeTunnel(t *testing.T) {
 			if err != nil {
 				return
 			}
-			echoRequests.Add(1)
 			_, _ = listener.WriteToUDP(buf[:n], from)
 		}
 	}()
-	// Prove that the listener is live independently of the encrypted path.
-	probe, err := net.DialUDP("udp4", nil, listener.LocalAddr().(*net.UDPAddr))
-	if err != nil {
-		t.Fatal(err)
-	}
-	_ = probe.SetDeadline(time.Now().Add(2 * time.Second))
-	_, _ = probe.Write([]byte("local echo"))
-	buf := make([]byte, 64)
-	n, err := probe.Read(buf)
-	_ = probe.Close()
-	if err != nil || string(buf[:n]) != "local echo" {
-		t.Fatalf("native UDP listener did not answer a host request: %v", err)
-	}
 	for _, client := range []struct {
 		tun *memoryTUN
 		ip  string
@@ -179,7 +148,7 @@ func TestWindowsNativeTunnel(t *testing.T) {
 		}
 		if !echoed {
 			state, stateErr := be.Device(context.Background())
-			t.Fatalf("encrypted UDP round trip failed for %s after retries; host received=%d driver state=%+v error=%v", client.ip, echoRequests.Load(), state, stateErr)
+			t.Fatalf("encrypted UDP round trip failed for %s after retries; driver state=%+v error=%v", client.ip, state, stateErr)
 		}
 	}
 	t.Log("PASS: real WireGuardNT handshake and bidirectional UDP")
@@ -267,68 +236,6 @@ func TestWindowsNativeTunnel(t *testing.T) {
 	if err != nil || len(state.Peers) != 0 {
 		t.Fatalf("replace peers failed: %+v %v", state, err)
 	}
-}
-
-// Packet Monitor is used only for ARM64 native-driver failures, where an
-// encrypted handshake alone cannot distinguish a driver drop from a host rule.
-// It never changes firewall policy and captures only this test's private subnet.
-func nativePacketDiagnostics(t *testing.T) {
-	t.Helper()
-	if runtime.GOARCH != "arm64" {
-		return
-	}
-	path := filepath.Join(t.TempDir(), "native.etl")
-	run := func(args ...string) string {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		out, err := exec.CommandContext(ctx, "pktmon.exe", args...).CombinedOutput()
-		if err != nil {
-			t.Logf("pktmon %v: %v %s", args, err, out)
-		}
-		return string(out)
-	}
-	run("filter", "add", "VPN20-native", "-i", "10.254.250.0/24")
-	run("start", "--capture", "--pkt-size", "0", "--file-name", path)
-	netsh := func(args ...string) string {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		out, err := exec.CommandContext(ctx, "netsh.exe", args...).CombinedOutput()
-		if err != nil {
-			t.Logf("netsh %v: %v", args, err)
-		}
-		return string(out)
-	}
-	netsh("wfp", "set", "options", "netevents=on")
-	t.Cleanup(func() {
-		defer netsh("wfp", "set", "options", "netevents=off")
-		if t.Failed() {
-			t.Log(run("counters", "--type", "drop", "--drop-reason"))
-		}
-		run("stop")
-		run("filter", "remove", "VPN20-native")
-		if !t.Failed() {
-			return
-		}
-		t.Log(netsh("wfp", "show", "netevents", "file=-", "remoteaddr=10.254.250.2", "timewindow=120"))
-		t.Log(netsh("wfp", "show", "filters", "file=-", "localaddr=10.254.250.1", "remoteaddr=10.254.250.2", "protocol=17", "dir=in", "verbose=on"))
-		textPath := path + ".txt"
-		run("etl2txt", path, "--out", textPath)
-		if out, err := os.ReadFile(textPath); err == nil {
-			if len(out) >= 2 && out[0] == 0xff && out[1] == 0xfe {
-				words := make([]uint16, (len(out)-2)/2)
-				for i := range words {
-					words[i] = binary.LittleEndian.Uint16(out[2+2*i:])
-				}
-				out = []byte(string(utf16.Decode(words)))
-			}
-			t.Logf("Native packet capture:\n%s", out)
-		}
-		ps := filepath.Join(os.Getenv("SystemRoot"), "System32", "WindowsPowerShell", "v1.0", "powershell.exe")
-		ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
-		defer cancel()
-		out, err := exec.CommandContext(ctx, ps, "-NoProfile", "-NonInteractive", "-Command", "Get-NetIPAddress -InterfaceAlias vpn20test | Format-List IPAddress,AddressState,PrefixLength; Get-NetIPInterface -InterfaceAlias vpn20test | Format-List InterfaceIndex,ConnectionState,Forwarding; Get-NetRoute -DestinationPrefix '10.254.250.0/24' | Format-List; Get-NetFirewallRule -Group VPN20 | Format-List Name,Enabled,Action,Profile,PrimaryStatus,Status; Get-NetFirewallRule -Group VPN20 | Get-NetFirewallInterfaceFilter | Format-List; Get-NetFirewallProfile | Format-List Name,Enabled,AllowInboundRules,AllowLocalFirewallRules").CombinedOutput()
-		t.Logf("Native host network: %v\n%s", err, out)
-	})
 }
 
 func checksum(p []byte) uint16 {

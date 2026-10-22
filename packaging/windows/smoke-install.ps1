@@ -1,5 +1,5 @@
 param([Parameter(Mandatory)][string]$Installer,
-    [ValidateSet('x64','x86','arm64')][string]$Architecture = 'x64')
+    [ValidateSet('x64','x86')][string]$Architecture = 'x64')
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $app = Join-Path $env:ProgramFiles 'VPN20'
@@ -51,6 +51,10 @@ try {
     $conf = Invoke-WebRequest "$base/api/peers/$($peer.id)/config" -Headers $headers -WebSession $session -UseBasicParsing
     $status = Invoke-RestMethod "$base/api/status" -Headers $headers -WebSession $session
     if ($status.backend -ne 'relay' -or $status.networkMode -ne 'relay' -or !$status.settings.clampMSS) { throw 'Fresh Windows installation did not enable the relay with MSS support' }
+    $updateStatus = Invoke-RestMethod "$base/api/update" -Headers $headers -WebSession $session
+    if (!$updateStatus.supported -or $updateStatus.method -ne 'windows') { throw ('Installed service did not enable the administrator updater: ' + $updateStatus.reason) }
+    & "$app\vpn20.exe" healthcheck
+    if ($LASTEXITCODE) { throw 'Installed command-line healthcheck failed' }
     $configText = $conf.Content
     if ($configText -is [byte[]]) { $configText = [System.Text.Encoding]::UTF8.GetString($configText) }
     if ($configText -notmatch '\[Interface\]') { throw 'Peer configuration export failed' }

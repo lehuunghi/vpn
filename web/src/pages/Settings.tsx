@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { api, type Settings } from "../api";
 import { errorMessage, useAuth, useLive, useToast } from "../state";
 import { Check, Field } from "../components/ui";
+import { Updater } from "../components/Updater";
 
 export function SettingsPage() {
   const { me } = useAuth();
@@ -110,6 +111,7 @@ export function SettingsPage() {
           </div>
         )}
       </form>
+      {!readOnly && <Updater />}
     </>
   );
 }

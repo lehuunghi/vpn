@@ -1,5 +1,6 @@
 # Build output
 /vpn20
+/vpn20.exe
 /dist/
 web/node_modules/
 web/dist/

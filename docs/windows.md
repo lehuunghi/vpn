@@ -1,7 +1,7 @@
 # VPN20 cho Windows
 
 VPN20 chạy máy chủ WireGuard và giao diện quản trị trực tiếp trên Windows,
-không cần Docker hoặc WSL. Bộ cài có **x64**, **x86 (32-bit)** và **ARM64**.
+không cần Docker hoặc WSL. Bộ cài có **x64** và **x86 (32-bit)**.
 Mặc định dùng **relay**: wireguard-go, netstack và adapter **Wintun** chính thức.
 TCP/UDP ra LAN hoặc Internet mở kết nối bằng IP của máy chủ; máy LAN trả lời
 trực tiếp, không cần thêm tuyến VPN trên router và không phụ thuộc WinNAT.
@@ -12,7 +12,7 @@ Bản Windows vẫn là prerelease; cần kiểm tra trên máy đích trước 
 ## Cài và sử dụng
 
 1. Vào [Releases](https://github.com/lehuunghi/vpn/releases), mở bản Windows mới
-   nhất và tải tệp `VPN20-…-windows-x64-setup.exe`, `…-x86-setup.exe` hoặc `…-arm64-setup.exe` đúng kiến trúc Windows trong **Assets**.
+   nhất và tải tệp `VPN20-…-windows-x64-setup.exe` hoặc `…-x86-setup.exe` đúng kiến trúc Windows trong **Assets**.
 2. Chạy bộ cài với quyền Administrator. Bộ cài cài chương trình, driver và dịch
    vụ Windows **VPN20**, cấu hình tự chạy khi bật máy và khởi động dịch vụ.
 3. Mở shortcut **VPN20** hoặc <http://127.0.0.1:51821>. Tạo tài khoản quản trị
@@ -30,12 +30,12 @@ mở ra Internet. Có thể bật HTTPS và đổi địa chỉ lắng nghe tron
 
 - Windows 10 1607+ (build 14393+), Windows 11; Home/Pro/Enterprise/Education/LTSC.
   Windows Server 2016/2019/2022/2025 và Server Core. x86 dành cho Windows
-  32-bit; x64 cho Intel/AMD 64-bit; ARM64 cho Windows trên ARM.
+  32-bit; x64 cho Intel/AMD 64-bit; Bộ cài Windows ARM64 không được cung cấp.
   Windows 7/8/8.1 và Server 2012/R2 nằm ngoài yêu cầu tối thiểu của Go hiện tại.
   Relay không yêu cầu WinNAT. Windows Home có thể nhận ping và dùng
   ứng dụng RDP để kết nối ra; nhận Microsoft RDP cần Pro/Enterprise/Education
-  hoặc Server. CI kiểm tra Server 2022/2025 x64, x86 trên Server 2022 qua WOW64 và Windows
-  11 ARM64; chưa xác minh trực tiếp Windows 10 Home hoặc máy Windows 32-bit thật.
+  hoặc Server. CI kiểm tra Server 2022/2025 x64, x86 trên Server 2022 qua WOW64;
+  chưa xác minh trực tiếp Windows 10 Home hoặc máy Windows 32-bit thật.
 - Quyền Administrator để cài driver, dịch vụ và mạng. Dịch vụ chạy dưới
   `LocalSystem`, tự khởi động có độ trễ và tự chạy lại sau lỗi.
 - Không cần cài riêng ứng dụng WireGuard lên máy chủ. Thiết bị kết nối vẫn cần
@@ -226,7 +226,7 @@ Trên máy Windows chạy PowerShell có quyền Administrator, cài Go theo
 `go.mod`, Node 26, Git và Inno Setup 6, rồi chạy:
 
 ```powershell
-./packaging/windows/build.ps1 -Architecture x64 # hoặc x86 / arm64 trên runner phù hợp
+./packaging/windows/build.ps1 -Architecture x64 # hoặc x86 trên runner phù hợp
 ./packaging/windows/smoke-install.ps1 -Installer (Get-ChildItem dist/release/*-setup.exe).FullName
 ```
 
@@ -263,3 +263,5 @@ Nguồn kỹ thuật: [WireGuardNT](https://git.zx2c4.com/wireguard-nt/about/),
 
 Yêu cầu nền tảng: [Go minimum requirements](https://go.dev/wiki/MinimumRequirements),
 [Wintun chính thức và SHA-256](https://www.wintun.net/).
+
+Hướng dẫn cài đặt đầy đủ, HTTPS, ký số và cập nhật một chạm: [docs/installation.md](installation.md).

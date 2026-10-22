@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"syscall"
@@ -25,10 +26,28 @@ import (
 	"github.com/lehuunghi/vpn/internal/engine"
 	"github.com/lehuunghi/vpn/internal/server"
 	"github.com/lehuunghi/vpn/internal/store"
+	"github.com/lehuunghi/vpn/internal/update"
 	"github.com/lehuunghi/vpn/internal/wg"
 )
 
 func main() {
+	// Update helpers must run before service/config initialization: they can
+	// restore a version whose normal service startup is currently failing.
+	if len(os.Args) > 1 && (os.Args[1] == "apply-update" || os.Args[1] == "docker-apply-update") {
+		var err error
+		if len(os.Args) != 3 {
+			err = errors.New("update helper requires a private plan file")
+		} else if os.Args[1] == "apply-update" {
+			err = update.Apply(os.Args[2])
+		} else {
+			err = update.DockerApply(os.Args[2])
+		}
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "vpn20 update:", err)
+			os.Exit(1)
+		}
+		return
+	}
 	if err := platformInit(); err != nil {
 		fmt.Fprintln(os.Stderr, "vpn20:", err)
 		os.Exit(1)
@@ -42,6 +61,20 @@ func main() {
 	}
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
+		case "healthcheck":
+			cfg, err := config.FromEnv()
+			if err == nil {
+				cert := cfg.TLSCert
+				if cert == "" && cfg.TLSSelfSigned {
+					cert = filepath.Join(cfg.DataDir, "tls.crt")
+				}
+				err = update.Health(context.Background(), update.LocalURL(cfg.HTTP, cfg.TLSEnabled()), cert, engine.Version)
+			}
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
+			return
 		case "version", "--version", "-v":
 			fmt.Println("VPN20", engine.Version)
 			return

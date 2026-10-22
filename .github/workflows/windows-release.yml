@@ -2,7 +2,7 @@ name: Windows release
 
 on:
   push:
-    branches: [main, windows-native-release, windows-peer-fix, windows-relay-parity]
+    branches: [main, windows-relay-parity]
     paths:
       - 'cmd/**'
       - 'internal/**'
@@ -51,8 +51,6 @@ jobs:
             arch: x64
           - os: windows-2022
             arch: x86
-          - os: windows-11-arm
-            arch: arm64
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
@@ -67,6 +65,10 @@ jobs:
           go-version-file: go.mod
       - name: Build and verify relay, WireGuardNT, WinNAT and isolation
         shell: pwsh
+        env:
+          VPN20_REQUIRE_SIGNING: ${{ github.ref == 'refs/heads/main' }}
+          VPN20_SIGN_PFX_BASE64: ${{ github.ref == 'refs/heads/main' && secrets.VPN20_SIGN_PFX_BASE64 || '' }}
+          VPN20_SIGN_PFX_PASSWORD: ${{ github.ref == 'refs/heads/main' && secrets.VPN20_SIGN_PFX_PASSWORD || '' }}
         run: ./packaging/windows/build.ps1 -Architecture ${{ matrix.arch }}
       - name: Install, restart, upgrade and uninstall the actual installer
         shell: pwsh
@@ -108,10 +110,6 @@ jobs:
           pattern: vpn20-windows-windows-2022-*
           merge-multiple: true
           path: release
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: vpn20-windows-windows-11-arm-arm64
-          path: release
       - name: Publish verified Windows installer
         env:
           GH_TOKEN: ${{ github.token }}
@@ -123,4 +121,4 @@ jobs:
             echo "Release $tag already exists. Bump packaging/windows/VERSION to publish another version."
             exit 0
           fi
-          gh release create "$tag" release/* --target "$GITHUB_SHA" --prerelease --title "VPN20 $version — Windows x64, x86 and ARM64" --notes-file packaging/windows/release-notes.md
+          gh release create "$tag" release/* --target "$GITHUB_SHA" --prerelease --title "VPN20 $version — Windows x64 and x86" --notes-file packaging/windows/release-notes.md

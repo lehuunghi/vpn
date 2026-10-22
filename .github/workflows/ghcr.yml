@@ -1,4 +1,4 @@
-# Build this fork directly; no upstream registry or personal access token.
+# Build VPN20 directly; no upstream registry or personal access token.
 name: Publish GHCR
 
 on:
@@ -52,6 +52,7 @@ jobs:
             type=sha,format=short
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
 
   build:
     name: Build ${{ matrix.platform }}

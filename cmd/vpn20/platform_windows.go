@@ -280,7 +280,7 @@ func manageService(action string) error {
 		_ = stopWindowsService(s)
 		return err
 	}
-	// First-time driver/network provisioning on Windows ARM64 can exceed 40s.
+	// First-time driver/network provisioning can exceed 40s.
 	deadline := time.Now().Add(2 * time.Minute)
 	for time.Now().Before(deadline) {
 		if windowsHealthReady(appConfig) {

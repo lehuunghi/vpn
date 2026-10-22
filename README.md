@@ -18,12 +18,18 @@ Khởi động máy chủ, mở giao diện quản trị, tạo thiết bị và
 VPN trên mô-đun WireGuard của nhân Linux, quản lý NAT và chuyển tiếp IP, đồng
 thời hiển thị thiết bị đang kết nối, tốc độ và lưu lượng sử dụng.
 
+## Hướng dẫn cài đặt đầy đủ
+
+Xem **[Cài đặt Windows, Linux, Docker, HTTPS và cập nhật tự động](docs/installation.md)**.
+Có hướng dẫn cho từng hệ điều hành, chọn kiến trúc, firewall/router, chứng chỉ, sao lưu và khôi phục.
+Quản trị viên có nút **Cập nhật phiên bản mới nhất** trong **Cài đặt**; Windows/Linux dịch vụ và Docker đã bật khả năng cập nhật được hỗ trợ.
+
 ## Cài trực tiếp trên Windows
 
-Tải bộ cài Windows x64 tại **[Releases](https://github.com/lehuunghi/vpn/releases)**.
+Tải bộ cài Windows x64/x86 tại **[Releases](https://github.com/lehuunghi/vpn/releases)**.
 Bộ cài kèm WireGuardNT và dịch vụ **VPN20** tự chạy khi bật máy, không cần
 Docker/WSL. Mở <http://127.0.0.1:51821> để thiết lập. Xem **[hướng dẫn Windows](docs/windows.md)**
-về bộ cài x64/x86/ARM64, relay TCP/UDP/ping ra LAN không cần WinNAT, IPv6, TCP MSS và giới hạn nền tảng.
+về bộ cài x64/x86, relay TCP/UDP/ping ra LAN không cần WinNAT, IPv6, TCP MSS và giới hạn nền tảng.
 
 ## Container tự động trên GHCR
 
@@ -108,6 +114,11 @@ bị, TCP MSS và khóa chia sẻ trước.
 | `VPN20_SESSION_MAX` | `168h` | Thời hạn tối đa của phiên đăng nhập. |
 | `VPN20_TRAFFIC_RETENTION` | `2160h` | Thời gian lưu lịch sử lưu lượng, tương đương 90 ngày. |
 | `VPN20_POLL_INTERVAL` | `2s` | Chu kỳ đọc bộ đếm giao diện. |
+| `VPN20_UPDATE_MODE` | `auto` | Cập nhật một chạm: `windows`, `systemd`, `docker`, `disabled`; xem docs/installation.md. |
+| `VPN20_UPDATE_PRERELEASE` | `false` | Cho phép bản thử nghiệm; bản đang chạy prerelease cũng xét bản thử nghiệm. |
+| `VPN20_UPDATE_CERT_SHA1` | trống | Ghim thumbprint chứng chỉ ký bộ cài Windows. |
+| `VPN20_DOCKER_SOCKET` | `/var/run/docker.sock` | Docker socket; chỉ gắn khi bật cập nhật Docker theo hướng dẫn. |
+| `VPN20_UPDATE_CONTAINER` | hostname | Container VPN20 được cập nhật; Compose override dùng `vpn20`. |
 | `VPN20_BACKEND` | `auto` | `kernel`, `userspace` hoặc `mock`; Linux ưu tiên nhân, Windows auto dùng relay. |
 | `VPN20_WINDOWS_NETWORK_MODE` | `auto` | Windows: `auto`/`relay` dùng IP máy chủ cho TCP/UDP/ping ra LAN/Internet; `routed`/`nat` chọn WireGuardNT. |
 | `VPN20_MANAGE_FIREWALL` | `true` | Đặt `false` nếu máy chủ tự quản lý quy tắc NAT. |
