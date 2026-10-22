@@ -54,6 +54,7 @@ export function Dashboard() {
         </div>
       </div>
       {error && <div className="error">{error}</div>}
+      {status?.networkMode === "routed" && <div className="notice">VPN đang chạy ở chế độ mạng ngang hàng: các thiết bị có thể liên lạc qua IP VPN khi tắt cô lập. Internet của thiết bị nên giữ qua mạng đang dùng; chọn định tuyến chỉ mạng VPN trong Cài đặt. {status.networkWarning}</div>}
       {status?.backend === "userspace" && (
         <div className="notice">
           <AlertTriangle size={14} style={{ verticalAlign: -2 }} /> Đang dùng chế độ xử lý trong không gian người dùng (wireguard-go). Nạp mô-đun <code>wireguard</code> vào nhân máy chủ để tăng tốc độ truyền lên nhiều lần.

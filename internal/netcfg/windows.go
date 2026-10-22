@@ -5,6 +5,7 @@ package netcfg
 import (
 	"context"
 	_ "embed"
+	"encoding/json"
 	"fmt"
 	"net"
 	"os"
@@ -38,7 +39,7 @@ func powershell(ctx context.Context, script string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 45*time.Second)
 	defer cancel()
 	path := filepath.Join(os.Getenv("SystemRoot"), "System32", "WindowsPowerShell", "v1.0", "powershell.exe")
-	cmd := exec.CommandContext(ctx, path, "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", "$ErrorActionPreference='Stop'; "+script)
+	cmd := exec.CommandContext(ctx, path, "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", "$ErrorActionPreference='Stop'; $utf8=New-Object System.Text.UTF8Encoding($false); [Console]::OutputEncoding=$utf8; $OutputEncoding=$utf8; "+script)
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -64,9 +65,6 @@ func Apply(ctx context.Context, r Rules) error {
 	defer firewall.Unlock()
 	if r.ClampMSS {
 		return fmt.Errorf("TCP MSS rewriting is unavailable on Windows; disable it and use a suitable tunnel MTU")
-	}
-	if r.Egress == "" {
-		return fmt.Errorf("Windows requires an Internet uplink; set VPN20_EGRESS_INTERFACE or provide an IPv4 default route")
 	}
 	iface, err := net.InterfaceByName(r.Iface)
 	if err != nil {
@@ -108,24 +106,44 @@ func Apply(ctx context.Context, r Rules) error {
 		}
 	}
 	var subnet string
+	ipv6 := "$false"
 	for _, s := range r.Subnets {
+		if s.Addr().Is6() {
+			ipv6 = "$true"
+		}
 		if s.Addr().Is4() {
 			subnet = s.Masked().String()
-			break
 		}
 	}
 	if subnet == "" {
 		return fmt.Errorf("an IPv4 VPN subnet is required for WinNAT")
 	}
-	_, err = powershell(ctx, networkScript+fmt.Sprintf("\nSet-VPN20Network -Tunnel %s -Uplink %s -Subnet %s -Port %d -StatePath %s", psQuote(r.Iface), psQuote(r.Egress), psQuote(subnet), r.ListenPort, psQuote(networkStatePath())))
+	mode := r.WindowsMode
+	if mode == "" {
+		mode = "auto"
+	}
+	out, err := powershell(ctx, networkScript+fmt.Sprintf("\nSet-VPN20Network -Tunnel %s -Uplink %s -Subnet %s -Port %d -StatePath %s -Mode %s -IPv6:%s | ConvertTo-Json -Compress", psQuote(r.Iface), psQuote(r.Egress), psQuote(subnet), r.ListenPort, psQuote(networkStatePath()), psQuote(mode), ipv6))
 	if err != nil {
 		return err
+	}
+	var result struct {
+		Mode    string
+		Warning string
+	}
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		return fmt.Errorf("read Windows network result: %w: %s", err, out)
+	}
+	if result.Mode != "nat" && result.Mode != "routed" {
+		return fmt.Errorf("Windows networking returned an invalid mode %q", result.Mode)
 	}
 	if firewall.session != nil {
 		_ = firewall.session.Close()
 	}
 	firewall.session = session
 	ok = true
+	if result.Mode == "routed" {
+		return &NetworkNotice{Mode: result.Mode, Message: result.Warning}
+	}
 	return nil
 }
 

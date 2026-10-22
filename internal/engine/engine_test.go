@@ -81,6 +81,11 @@ func TestAllocate(t *testing.T) {
 func TestCreatePeerAndConfig(t *testing.T) {
 	e, mock := newTestEngine(t)
 	ctx := context.Background()
+	settings := e.Settings()
+	settings.ClientRoutes, settings.DNS = "0.0.0.0/0, ::/0", "1.1.1.1"
+	if err := e.UpdateSettings(ctx, settings); err != nil {
+		t.Fatal(err)
+	}
 	p, err := e.CreatePeer(ctx, PeerInput{Name: "Laptop"})
 	if err != nil {
 		t.Fatal(err)

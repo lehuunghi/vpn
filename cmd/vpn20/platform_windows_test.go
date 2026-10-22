@@ -5,6 +5,7 @@ package main
 import (
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -15,6 +16,45 @@ import (
 	"github.com/lehuunghi/vpn/internal/config"
 	"github.com/lehuunghi/vpn/internal/engine"
 )
+
+func TestWindowsStopIgnoresBrokenConfig(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(path, []byte("broken json"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("VPN20_CONFIG", path)
+	args := os.Args
+	t.Cleanup(func() { os.Args = args })
+	os.Args = []string{"vpn20.exe", "stop-service"}
+	if err := platformInit(); err != nil {
+		t.Fatal(err)
+	}
+	os.Args = []string{"vpn20.exe", "install-service"}
+	if err := platformInit(); err == nil {
+		t.Fatal("invalid configuration was accepted for startup")
+	}
+	body, err := os.ReadFile(filepath.Join(filepath.Dir(path), "install-error.txt"))
+	if err != nil || !strings.Contains(string(body), "config.json") {
+		t.Fatalf("installer lost configuration error: %s %v", body, err)
+	}
+}
+
+func TestWindowsInstallErrorIncludesBoundedLog(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("VPN20_CONFIG", filepath.Join(dir, "config.json"))
+	if err := os.WriteFile(filepath.Join(dir, "vpn20.log"), []byte(strings.Repeat("old entry\n", 2000)+"driver startup failed"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	writeInstallResult(errors.New("service not ready"))
+	body, err := os.ReadFile(filepath.Join(dir, "install-error.txt"))
+	if err != nil || len(body) > 4000 || !strings.Contains(string(body), "service not ready") || !strings.Contains(string(body), "driver startup failed") {
+		t.Fatalf("bad installer diagnostics: %d bytes, %v", len(body), err)
+	}
+	writeInstallResult(nil)
+	if _, err := os.Stat(filepath.Join(dir, "install-error.txt")); !os.IsNotExist(err) {
+		t.Fatal("successful startup left stale diagnostics")
+	}
+}
 
 func TestWindowsConfigPrecedence(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.json")

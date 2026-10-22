@@ -50,6 +50,9 @@ Copy-Item LICENSE, NOTICE $stage
 Copy-Item docs\windows.md "$stage\README-Windows.md"
 Copy-Item packaging\windows\config.example.json $stage
 Copy-Item web\public\favicon.ico "$stage\vpn20.ico"
+$helper = (Get-Content internal\server\peer_access.ps1 -Raw).Replace('__VPN20_SUBNET__', '10.8.0.0/24')
+[IO.File]::WriteAllText("$stage\Enable-VPN20-PeerAccess.ps1", $helper, [Text.UTF8Encoding]::new($true))
+Copy-Item "$stage\Enable-VPN20-PeerAccess.ps1" $out
 go version -m "$stage\vpn20.exe" | Set-Content "$stage\build-info.txt" -Encoding UTF8
 
 # Include third-party license texts in binary packages as well as source.

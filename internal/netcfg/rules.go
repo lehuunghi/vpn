@@ -4,6 +4,8 @@ import "net/netip"
 
 // Rules describes the firewall vpn20 wants.
 type Rules struct {
+	// WindowsMode is auto, routed (peer/LAN access), or nat (require WinNAT).
+	WindowsMode string
 	// Iface is the WireGuard interface name, e.g. wg0.
 	Iface string
 	// Egress is the interface peers reach the outside world through. Empty

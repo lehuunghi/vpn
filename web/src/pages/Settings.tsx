@@ -11,11 +11,12 @@ export function SettingsPage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [platform, setPlatform] = useState("");
+  const [vpnRoutes, setVPNRoutes] = useState("");
   const readOnly = me?.role !== "admin";
 
   useEffect(() => {
     api.settings().then(setS).catch((e) => setError(errorMessage(e)));
-    api.status().then((status) => setPlatform(status.platform)).catch((e) => setError(errorMessage(e)));
+    api.status().then((status) => { setPlatform(status.platform); setVPNRoutes([status.subnet4, status.subnet6].filter(Boolean).join(", ")); }).catch((e) => setError(errorMessage(e)));
   }, [settingsVersion]);
 
   async function submit(e: FormEvent) {
@@ -74,6 +75,8 @@ export function SettingsPage() {
               </Field>
               <Field label="Định tuyến thiết bị (AllowedIPs)" hint="0.0.0.0/0, ::/0 gửi toàn bộ lưu lượng qua VPN.">
                 <input className="input mono" value={s.clientRoutes} onChange={(e) => set("clientRoutes", e.target.value)} disabled={readOnly} required />
+                <button className="btn sm" type="button" disabled={readOnly || !vpnRoutes} onClick={() => setS({ ...s, clientRoutes: vpnRoutes, dns: "", peerIsolation: false })}>Chỉ mạng VPN · cho phép ping / remote</button>
+                <p className="small muted">Internet và DNS giữ theo mạng của thiết bị. Lưu cài đặt; với thiết bị cũ, vào Chỉnh sửa, xóa AllowedIPs và DNS để dùng mặc định mới, lưu rồi tải lại .conf.</p>
               </Field>
               <Field label="MTU" hint="Dùng 1420 cho mạng IPv4 có MTU 1500; 1412 cho PPPoE; 1400 hoặc thấp hơn cho IPv6 qua IPv6 hoặc khi tải xuống bị treo.">
                 <input className="input" type="number" min={1280} max={9000} value={s.mtu} onChange={(e) => set("mtu", Number(e.target.value))} disabled={readOnly} required />
