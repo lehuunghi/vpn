@@ -2,12 +2,13 @@
 
 Trong **Cài đặt**, nhập phần tên, ví dụ **vanphong**, rồi bấm **Cập nhật**.
 VPN20 dùng **vanphong.vpn.20.com.vn**, tự cập nhật IP Internet và tự cấp/gia hạn
-chứng chỉ HTTPS bằng CertMagic, thư viện của Caddy. HTTPS mặc định **TCP 443**;
+chứng chỉ HTTPS bằng CertMagic, thư viện của Caddy. Mở **https://vanphong.vpn.20.com.vn:8443**.
+HTTPS mặc định **TCP 8443**;
 không tự đổi sang cổng khác nếu cổng này bị chiếm. HTTP trên LAN giữ cổng 51821.
 
 ## Quản trị dịch vụ: nâng Worker hiện có một lần
 
-VPN20 cần Worker **0.2.0** trong [deploy/ddns-worker](../deploy/ddns-worker).
+VPN20 cần Worker **0.2.1** trong [deploy/ddns-worker](../deploy/ddns-worker).
 Worker cũ chỉ có đăng ký quản trị/cập nhật IP nên chưa đủ cho nút này.
 
 1. Sao lưu D1 hiện có. Trong D1 Console, chạy toàn bộ
@@ -19,9 +20,13 @@ Worker cũ chỉ có đăng ký quản trị/cập nhật IP nên chưa đủ ch
    hiện có. Token Cloudflare cần quyền DNS Write cho zone **20.com.vn**; token
    không được đưa vào VPN20 hay bộ cài.
 4. Gắn Custom Domain **ddns.20.com.vn** vào Worker nếu chưa có.
-5. GET **https://ddns.20.com.vn/health** phải trả **version: 0.2.0** và features
-   chứa **claim**, **dual-stack**, **dns01**. Health không chứng minh NAT/HTTPS/VPN
-   tại các máy đã hoạt động.
+5. GET **https://ddns.20.com.vn/health** phải trả **version: 0.2.1** và features
+   chứa **claim**, **dual-stack**, **dns01**, **schema-check**. Health kiểm tra
+   binding/cấu hình và schema D1, không thử quyền token Cloudflare hay NAT/HTTPS/VPN.
+
+Worker 0.2.1 tự bổ sung ba bảng phụ còn thiếu trên D1 của bản 0.1.0 khi nhận
+yêu cầu đầu tiên. Giữ nguyên bảng hosts và các khóa đã cấp. Với database mới
+hoặc thiếu cột trong bảng hiện có, vẫn chạy schema.sql; không xóa database.
 
 Giới hạn đăng ký công khai mặc định: **3 tên/mạng IP/ngày**, **50 tên toàn dịch
 vụ**, bao gồm tên cũ. Đặt Variables **CLAIMS_PER_IP_DAY**, **MAX_HOSTS** để điều
@@ -36,37 +41,37 @@ ADMIN_TOKEN để giải quyết việc này.
 ## Windows
 
 1. Cài/nâng cấp VPN20, vào **Cài đặt → Subdomain**, nhập tên, bấm **Cập nhật**.
-2. VPN20 tự thêm rule Windows Firewall **VPN20-Public-HTTPS** cho TCP 443 khi
+2. VPN20 tự thêm rule Windows Firewall **VPN20-Public-HTTPS** cho TCP 8443 khi
    bật tính năng. Rule HTTP quản trị LAN vẫn chỉ cho LocalSubnet.
-3. Trên router, chuyển tiếp **TCP 443** về IP LAN máy chủ. Giữ chuyển tiếp
+3. Trên router, chuyển tiếp **TCP 8443** về IP LAN máy chủ. Giữ chuyển tiếp
    **UDP 51820** hoặc cổng WireGuard đã chọn.
-4. Khi báo **SSL sẵn sàng**, mở **https://ten.vpn.20.com.vn**; thử từ 4G/5G.
+4. Khi báo **SSL sẵn sàng**, mở **https://ten.vpn.20.com.vn:8443**; thử từ 4G/5G.
 
-Nếu TCP 443 đã bị chiếm trên máy, VPN20 báo lỗi và giữ đường LAN. Nếu hệ thống
-khác trong LAN đang nhận WAN 443, cần chuyển NAT về VPN20 hoặc dùng reverse
-proxy chung định tuyến theo hostname. Ứng dụng không tự sửa router/proxy khác.
+Nếu TCP 8443 đã bị chiếm trên máy, VPN20 báo lỗi và giữ đường LAN. Hệ thống
+khác đang dùng WAN 443 có thể tiếp tục dùng cổng đó: tạo NAT riêng WAN TCP 8443
+về TCP 8443 của VPN20. Ứng dụng không tự sửa router/proxy khác.
 
 ## Linux / systemd
 
-Dùng cùng thao tác giao diện. Cho phép TCP 443 trong firewall máy/VPS.
+Dùng cùng thao tác giao diện. Cho phép TCP 8443 trong firewall máy/VPS.
 Chọn đúng công cụ đang quản lý firewall:
 
-- UFW: **sudo ufw allow 443/tcp**
-- firewalld: **sudo firewall-cmd --permanent --add-service=https**, rồi
+- UFW: **sudo ufw allow 8443/tcp**
+- firewalld: **sudo firewall-cmd --permanent --add-port=8443/tcp**, rồi
   **sudo firewall-cmd --reload**
-- nftables tự quản lý: cho phép TCP 443 trong chain input hiện có.
+- nftables tự quản lý: cho phép TCP 8443 trong chain input hiện có.
 
-Dịch vụ native chạy root có thể bind 443. Nếu tự chạy bằng tài khoản khác,
-cấp quyền bind cổng thấp phù hợp. Không cần cổng 80 cho DNS-01.
+Cổng 8443 không yêu cầu quyền bind cổng thấp. DNS-01 không cần cổng vào 80/443.
+Quyền root của dịch vụ vẫn cần cho việc quản lý mạng WireGuard/firewall.
 
 ## Docker / Podman
 
-Compose bridge đã có **443:443/tcp**. Container cũ cần thêm mapping rồi chạy
+Compose bridge đã có **8443:8443/tcp**. Container cũ cần thêm mapping rồi chạy
 **docker compose up -d** bằng image/bản build mới. Trình cập nhật trong quản trị
 giữ cấu hình container hiện có, không tự thêm mapping thiếu. Dùng
 **docker compose up -d --build** nếu xây dựng từ mã nguồn.
 
-Ở chế độ host networking, 443 trên host phải còn trống. IPv6 public chỉ dùng
+Ở chế độ host networking, 8443 trên host phải còn trống. IPv6 public chỉ dùng
 khi container thật sự có đường IPv6 vào/ra và firewall cho phép; không bật AAAA
 dựa trên IPv6 của host nếu container không nhận được kết nối đó.
 Bộ dò IP kết nối trực tiếp từ tiến trình VPN20, không dùng HTTP proxy.
@@ -102,20 +107,51 @@ Giữ volume **/data** khi thay container.
 | Biến | Mặc định |
 | --- | --- |
 | VPN20_DDNS_API | https://ddns.20.com.vn |
-| VPN20_DDNS_HTTPS | :443 |
+| VPN20_DDNS_HTTPS | :8443 |
 | VPN20_DDNS_ACME_CA | trống: Let's Encrypt production |
 
 Chỉ đặt VPN20_DDNS_ACME_CA khi thử CA staging/nội bộ; trình duyệt không tin
 chứng chỉ staging và giao diện ghi rõ chứng chỉ thử nghiệm. Biến có thể đặt
 trong JSON Windows, file môi trường systemd hoặc environment Docker.
 
+## Nâng từ bản HTTPS 443
+
+Cập nhật VPN20 lên 1.2.1. Cấu hình mặc định tự chuyển sang 8443 sau khi khởi
+động lại; hostname, khóa và chứng chỉ vẫn giữ nguyên. Nếu trước đây đã tự đặt
+**VPN20_DDNS_HTTPS=:443**, đổi thành **:8443** hoặc bỏ biến để dùng mặc định.
+Windows: **C:\ProgramData\VPN20\config.json** rồi restart dịch vụ VPN20;
+Linux: **/etc/vpn20/vpn20.env** rồi **sudo systemctl restart vpn20**;
+Docker: sửa environment và mapping **8443:8443/tcp**, tạo lại container.
+Đổi NAT/firewall sang TCP 8443. Endpoint UDP WireGuard không thêm cổng 8443.
+
+API trung tâm **https://ddns.20.com.vn** vẫn dùng HTTPS 443. Không đổi API
+thành :8443. Cổng 8443 chỉ dành cho trang quản trị trên máy cài VPN20.
+Nếu dùng URL Worker khác, đặt **VPN20_DDNS_API=https://ten-worker.tai-khoan.workers.dev**
+ở cấu hình hạ tầng rồi restart; URL phải chạy đúng Worker này và dùng HTTPS.
+
 ## Chẩn đoán
 
-- **Cần cập nhật Worker:** Deploy 0.2.0 và chạy schema mới.
+Mở **https://ddns.20.com.vn/health** trước, phải có **ok: true**. Nếu không
+vào được, kiểm tra Custom Domain **ddns.20.com.vn** đã gắn đúng Worker trong
+Cloudflare, DNS, SSL và Cloudflare Access/WAF. API cần cho phép tiến trình máy
+chủ gọi trực tiếp, không đưa ra trang đăng nhập/challenge tương tác.
+
+Thông báo VPN20 ghi bước API, hostname và HTTP status an toàn, không trả raw
+HTML, token hay lỗi SQL. Trường hợp chỉ lỗi trên một máy: kiểm tra DNS, giờ
+hệ thống, chứng chỉ gốc và outbound HTTPS của máy đó; đổi 8443 không sửa đường
+kết nối tới API trung tâm.
+
+- **not_configured:** kiểm tra binding DB, CF_ZONE_ID và hai Secrets rồi Deploy.
+- **schema_outdated:** chạy schema.sql mới trên đúng D1 đang gắn binding DB.
+- **database_unavailable:** kiểm tra binding, dịch vụ và hạn mức D1.
+- **dns_auth_error:** token cần quyền DNS Write cho đúng zone 20.com.vn.
+- **dns_api_unavailable:** Worker không kết nối được Cloudflare; tự thử lại.
+
+- **Cần cập nhật Worker:** Deploy 0.2.1 và chạy schema mới.
 - **Tên đã sử dụng:** chọn tên khác; giữ database/khóa cũ để phục hồi tên.
-- **Cổng HTTPS:** kiểm tra dịch vụ đang nghe TCP 443; không fallback 8443.
+- **Cổng HTTPS:** kiểm tra dịch vụ đang nghe TCP 8443; không tự đổi cổng.
 - **Chưa cấp SSL:** kiểm tra Cloudflare Secret/quyền DNS, outbound HTTPS,
   DNS UDP/TCP 53 và log máy chủ. TXT cũ của dịch vụ được dọn khi yêu cầu mới;
   TXT thủ công được giữ nguyên.
 - **Có SSL nhưng không vào Internet:** kiểm tra A/AAAA, CGNAT, firewall,
-  NAT TCP 443 và ứng dụng đang nhận cổng WAN.
+  NAT TCP 8443 và ứng dụng đang nhận cổng WAN.

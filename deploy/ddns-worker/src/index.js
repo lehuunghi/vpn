@@ -3,6 +3,7 @@ const DOMAIN = "vpn.20.com.vn";
 const API = "https://api.cloudflare.com/client/v4";
 const MIN_INTERVAL_MS = 30_000;
 const VERIFY_INTERVAL_MS = 15 * 60_000;
+const LEASE_MS = 90_000;
 const RESERVED = new Set(["api", "ddns", "admin", "www", "mail", "ns", "ns1", "ns2", "acme", "auth"]);
 
 class APIError extends Error {
@@ -21,6 +22,47 @@ const reply = (data, status = 200) => new Response(JSON.stringify(data), {
 const randomKey = () => Array.from(crypto.getRandomValues(new Uint8Array(32)), n => n.toString(16).padStart(2, "0")).join("");
 const digest = async value => new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)));
 const hash = async value => Array.from(await digest(value), n => n.toString(16).padStart(2, "0")).join("");
+
+// Keep this file paste-and-deploy compatible with the Cloudflare editor.
+// Upgrade only additive v0.2 tables; never recreate or modify existing hosts.
+const schemaChecks = new WeakMap();
+const auxiliarySchema = [
+  "CREATE TABLE IF NOT EXISTS claim_buckets (bucket TEXT PRIMARY KEY, attempts INTEGER NOT NULL, expires_at INTEGER NOT NULL)",
+  "CREATE INDEX IF NOT EXISTS claim_buckets_expiry ON claim_buckets(expires_at)",
+  "CREATE TABLE IF NOT EXISTS acme_locks (host_id TEXT PRIMARY KEY REFERENCES hosts(id), lock_id TEXT NOT NULL, expires_at INTEGER NOT NULL)",
+  "CREATE TABLE IF NOT EXISTS acme_records (record_id TEXT PRIMARY KEY, host_id TEXT NOT NULL REFERENCES hosts(id), value TEXT NOT NULL, created_at INTEGER NOT NULL, UNIQUE(host_id, value))",
+];
+const auxiliaryProbe = "SELECT (SELECT bucket FROM claim_buckets LIMIT 1), (SELECT attempts FROM claim_buckets LIMIT 1), (SELECT expires_at FROM claim_buckets LIMIT 1), (SELECT host_id FROM acme_locks LIMIT 1), (SELECT lock_id FROM acme_locks LIMIT 1), (SELECT expires_at FROM acme_locks LIMIT 1), (SELECT record_id FROM acme_records LIMIT 1), (SELECT host_id FROM acme_records LIMIT 1), (SELECT value FROM acme_records LIMIT 1), (SELECT created_at FROM acme_records LIMIT 1)";
+
+function databaseError(error) {
+  const schema = /no such (?:table|column)|has no column named/i.test(String(error?.message));
+  return new APIError(503, schema ? "schema_outdated" : "database_unavailable", schema
+    ? "D1 thiếu bảng/cột. Chạy schema.sql mới trên database đang gắn binding DB; không xóa dữ liệu cũ."
+    : "Không truy cập được D1. Kiểm tra binding DB, trạng thái và hạn mức D1.");
+}
+
+async function ensureSchema(db, refresh = false) {
+  const previous = schemaChecks.get(db);
+  if (!refresh && previous && previous.expires > Date.now()) return previous.promise;
+  const check = { expires: Date.now() + 60_000 };
+  check.promise = (async () => {
+    try {
+      await db.prepare("SELECT id,label,hostname,token_hash,disabled,ipv4,ipv6,verified4,verified6,last_attempt,lock_id,lock_until,created_at FROM hosts LIMIT 1").first();
+      try { await db.prepare(auxiliaryProbe).first(); }
+      catch (error) {
+        if (!/no such table/i.test(String(error?.message))) throw error;
+        for (const sql of auxiliarySchema) await db.prepare(sql).run();
+        await db.prepare(auxiliaryProbe).first();
+      }
+    } catch (error) { throw databaseError(error); }
+  })();
+  schemaChecks.set(db, check);
+  try { await check.promise; }
+  catch (error) {
+    if (schemaChecks.get(db) === check) schemaChecks.delete(db);
+    throw error;
+  }
+}
 
 function bearer(request) {
   const match = /^Bearer ([A-Za-z0-9_-]{32,256})$/.exec(request.headers.get("Authorization") || "");
@@ -104,15 +146,18 @@ function publicIP(value) {
 }
 
 async function cloudflare(env, path, method = "GET", payload) {
-  const response = await fetch(`${API}/zones/${env.CF_ZONE_ID}/dns_records${path}`, {
+  let response;
+  try { response = await fetch(`${API}/zones/${env.CF_ZONE_ID}/dns_records${path}`, {
     method,
     headers: { Authorization: `Bearer ${env.CF_API_TOKEN}`, "Content-Type": "application/json" },
     body: payload === undefined ? undefined : JSON.stringify(payload),
     signal: AbortSignal.timeout(8000),
-  });
+  }); } catch { fail(502, "dns_api_unavailable", "Worker không kết nối được API Cloudflare. Thử lại sau."); }
   let data;
   try { data = await response.json(); } catch { fail(502, "dns_api_error", "Cloudflare trả dữ liệu không hợp lệ."); }
   if (!response.ok || !data.success) {
+    if (response.status === 401 || response.status === 403) fail(502, "dns_auth_error", "Kiểm tra CF_API_TOKEN và quyền DNS Write cho zone 20.com.vn.");
+    if (response.status === 404) fail(502, "dns_zone_error", "Kiểm tra CF_ZONE_ID và phạm vi token Cloudflare.");
     const codes = (data.errors || []).map(e => Number(e.code)).filter(Number.isFinite).join(",");
     fail(502, "dns_api_error", `Cloudflare HTTP ${response.status}${codes ? `, mã ${codes}` : ""}. Kiểm tra token, Zone ID và hạn mức.`);
   }
@@ -143,7 +188,7 @@ async function update(request, env) {
   const lock = crypto.randomUUID();
   const result = await env.DB.prepare(
     "UPDATE hosts SET lock_id=?,lock_until=?,last_attempt=? WHERE id=? AND token_hash=? AND disabled=0 AND lock_until<=? AND last_attempt<=?"
-  ).bind(lock, now + 30_000, now, host.id, keyHash, now, now - MIN_INTERVAL_MS).run();
+  ).bind(lock, now + LEASE_MS, now, host.id, keyHash, now, now - MIN_INTERVAL_MS).run();
   if (!result.meta.changes) {
     const response = reply({ ok: false, error: "rate_limited", message: "Đợi ít nhất 30 giây giữa hai lần cập nhật." }, 429);
     response.headers.set("Retry-After", "30");
@@ -228,7 +273,15 @@ async function claim(request, env) {
     "INSERT INTO claim_buckets(bucket,attempts,expires_at) VALUES(?,1,?) ON CONFLICT(bucket) DO UPDATE SET attempts=attempts+1 WHERE attempts<?"
   ).bind(bucket, now + 86400000, limit(env.CLAIMS_PER_IP_DAY, 3, 100)).run();
   if (!rate.meta.changes) fail(429, "claim_limit", "Đã đạt hạn mức đăng ký của mạng này. Thử lại ngày mai.");
-  const existingDNS = await cloudflare(env, "?" + new URLSearchParams({ name: hostname, per_page: "100" }));
+  let existingDNS;
+  try { existingDNS = await cloudflare(env, "?" + new URLSearchParams({ name: hostname, per_page: "100" })); }
+  catch (error) {
+    // An upstream outage must not consume the user's daily registration quota.
+    if (error instanceof APIError && error.status === 502) {
+      await env.DB.prepare("UPDATE claim_buckets SET attempts=attempts-1 WHERE bucket=? AND attempts>0").bind(bucket).run();
+    }
+    throw error;
+  }
   if (!Array.isArray(existingDNS) || existingDNS.length) {
     fail(409, "dns_record_conflict", "Tên đã có bản ghi DNS ngoài quyền quản lý.");
   }
@@ -254,7 +307,7 @@ async function acme(request, env, remove) {
   const lock = crypto.randomUUID(), now = Date.now();
   const acquired = await env.DB.prepare(
     "INSERT INTO acme_locks(host_id,lock_id,expires_at) VALUES(?,?,?) ON CONFLICT(host_id) DO UPDATE SET lock_id=excluded.lock_id,expires_at=excluded.expires_at WHERE expires_at<=?"
-  ).bind(host.id, lock, now + 30000, now).run();
+  ).bind(host.id, lock, now + LEASE_MS, now).run();
   if (!acquired.meta.changes) fail(429, "acme_busy", "Đang xử lý xác thực SSL. Thử lại sau 30 giây.");
   const dnsName = "_acme-challenge." + host.hostname;
   const marker = "VPN20-ACME:" + host.id;
@@ -301,7 +354,7 @@ async function retire(request, env) {
   const host = await ownedHost(request, env);
   await body(request, []);
   const lock = crypto.randomUUID(), now = Date.now();
-  const acquired = await env.DB.prepare("UPDATE hosts SET lock_id=?,lock_until=? WHERE id=? AND disabled=0 AND lock_until<=?").bind(lock, now + 30000, host.id, now).run();
+  const acquired = await env.DB.prepare("UPDATE hosts SET lock_id=?,lock_until=? WHERE id=? AND disabled=0 AND lock_until<=?").bind(lock, now + LEASE_MS, host.id, now).run();
   if (!acquired.meta.changes) fail(429, "busy", "Hostname đang được cập nhật. Thử lại sau 30 giây.");
   try {
     for (const type of ["A", "AAAA"]) {
@@ -324,8 +377,9 @@ export default {
       const path = new URL(request.url).pathname;
       const configured = Boolean(env.DB && /^[a-f0-9]{32}$/i.test(env.CF_ZONE_ID || "") &&
         env.CF_API_TOKEN?.length >= 20 && /^[A-Za-z0-9_-]{32,256}$/.test(env.ADMIN_TOKEN || ""));
-      if (path === "/health" && request.method === "GET") return reply({ ok: configured, service: "vpn20-ddns", version: "0.2.0", domain: DOMAIN, features: ["claim", "dual-stack", "dns01"] }, configured ? 200 : 503);
       if (!configured) fail(503, "not_configured", "Cần cấu hình DB, CF_ZONE_ID, CF_API_TOKEN và ADMIN_TOKEN.");
+      await ensureSchema(env.DB, path === "/health");
+      if (path === "/health" && request.method === "GET") return reply({ ok: true, service: "vpn20-ddns", version: "0.2.1", domain: DOMAIN, features: ["claim", "dual-stack", "dns01", "schema-check"] });
       if (path === "/v1/ip" && request.method === "GET") return reply({ ok: true, ...publicIP(request.headers.get("CF-Connecting-IP")) });
       if (request.method !== "POST") fail(405, "method_not_allowed", "Dùng POST cho API này.");
       if (path === "/v1/claim") return await claim(request, env);
@@ -361,6 +415,10 @@ export default {
       fail(404, "not_found", "Đường dẫn không tồn tại.");
     } catch (error) {
       if (error instanceof APIError) return reply({ ok: false, error: error.code, message: error.message }, error.status);
+      if (/D1_ERROR|no such (?:table|column)|has no column named/i.test(String(error?.message))) {
+        const failure = databaseError(error);
+        return reply({ ok: false, error: failure.code, message: failure.message }, failure.status);
+      }
       // Do not expose request headers, body, database errors, or Cloudflare credentials.
       return reply({ ok: false, error: "service_error", message: "Dịch vụ lỗi. Kiểm tra D1, cấu hình và thử lại sau 30 giây." }, 503);
     }

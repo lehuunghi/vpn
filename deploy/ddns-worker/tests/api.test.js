@@ -162,10 +162,87 @@ test("retiring removes only owned address records and preserves the name reserva
 
 test("health advertises protocol capabilities and IP discovery returns only the source IP", async () => {
   const health = await call("/health", { method: "GET" });
-  assert.equal(health.body.version, "0.2.0");
+  assert.equal(health.body.version, "0.2.1");
   assert.ok(health.body.features.includes("dns01"));
   const ip = await call("/v1/ip", { method: "GET", ip: "8.8.4.4" });
   assert.deepEqual(ip.body, { ok: true, ip: "8.8.4.4", type: "A" });
+});
+
+test("pasting the new Worker upgrades original tables without losing hosts or keys", async () => {
+  const host = await register("existing");
+  await call("/v1/update", { token: host.update_token, data: {} });
+  const before = sqlite.prepare("SELECT * FROM hosts").get();
+  sqlite.exec("DROP TABLE acme_records; DROP TABLE acme_locks; DROP TABLE claim_buckets");
+  env.DB = database(sqlite); // New deployment/isolate, original v0.1 database.
+  assert.equal((await call("/health", { method: "GET" })).status, 200);
+  assert.deepEqual(sqlite.prepare("SELECT * FROM hosts").get(), before);
+  assert.equal((await call("/v1/claim", { token: host.update_token, data: { name: "existing" } })).status, 200);
+  assert.equal((await call("/v1/claim", { token: "2".repeat(64), data: { name: "new-machine" } })).status, 201);
+  assert.equal((await call("/v1/acme/present", { token: host.update_token, data: { value: "a".repeat(43) } })).status, 200);
+  assert.equal((await call("/v1/acme/cleanup", { token: host.update_token, data: { value: "a".repeat(43) } })).status, 200);
+});
+
+test("health checks real D1 schema and recovers after a failed readiness check", async () => {
+  sqlite.exec("DROP TABLE acme_records; DROP TABLE acme_locks; DROP TABLE claim_buckets; DROP TABLE hosts");
+  let result = await call("/health", { method: "GET" });
+  assert.equal(result.status, 503);
+  assert.equal(result.body.error, "schema_outdated");
+  assert.match(result.body.message, /schema.sql/);
+  assert.equal(dnsCalls.length, 0);
+  sqlite.exec(readFileSync(new URL("../schema.sql", import.meta.url), "utf8"));
+  result = await call("/health", { method: "GET" });
+  assert.equal(result.status, 200);
+  assert.equal(result.body.ok, true);
+});
+
+test("health rejects incompatible auxiliary columns instead of claiming readiness", async () => {
+  sqlite.exec("DROP TABLE claim_buckets; CREATE TABLE claim_buckets (bucket TEXT PRIMARY KEY)");
+  const result = await call("/health", { method: "GET" });
+  assert.equal(result.status, 503);
+  assert.equal(result.body.error, "schema_outdated");
+});
+
+test("D1 outage returns a safe actionable error and can recover", async () => {
+  env.DB = { prepare() { throw new Error("D1_ERROR: quota exceeded SECRET"); } };
+  const result = await call("/health", { method: "GET" });
+  assert.equal(result.status, 503);
+  assert.equal(result.body.error, "database_unavailable");
+  assert.equal(JSON.stringify(result.body).includes("SECRET"), false);
+  env.DB = database(sqlite);
+  assert.equal((await call("/health", { method: "GET" })).status, 200);
+});
+
+test("Cloudflare network and authorization failures are distinguishable and retryable", async () => {
+  env.CLAIMS_PER_IP_DAY = "1";
+  const workingFetch = globalThis.fetch;
+  globalThis.fetch = async () => { throw new Error("timeout SECRET"); };
+  let result = await call("/v1/claim", { token: "1".repeat(64), data: { name: "office" } });
+  assert.equal(result.status, 502);
+  assert.equal(result.body.error, "dns_api_unavailable");
+  assert.equal(JSON.stringify(result.body).includes("SECRET"), false);
+  globalThis.fetch = workingFetch;
+  dnsFailure = true;
+  result = await call("/v1/claim", { token: "1".repeat(64), data: { name: "office" } });
+  assert.equal(result.body.error, "dns_auth_error");
+  dnsFailure = false;
+  assert.equal((await call("/v1/claim", { token: "1".repeat(64), data: { name: "office" } })).status, 201);
+});
+
+test("slow upstream operations keep their lease beyond the old 30-second expiry", async () => {
+  const host = await register("slow");
+  const workingFetch = globalThis.fetch;
+  let release, entered;
+  const gate = new Promise(resolve => { release = resolve; });
+  const started = new Promise(resolve => { entered = resolve; });
+  globalThis.fetch = async (...args) => { entered(); await gate; return workingFetch(...args); };
+  const first = call("/v1/update", { token: host.update_token, data: {} });
+  await started;
+  now += 31000;
+  const competing = await call("/v1/update", { token: host.update_token, data: {} });
+  assert.equal(competing.status, 429);
+  release();
+  assert.equal((await first).status, 200);
+  assert.equal(records.length, 1);
 });
 
 async function call(path, { token, data, ip = "8.8.8.8", method = "POST", headers = {} } = {}) {

@@ -209,11 +209,13 @@ func (m *Manager) Configure(ctx context.Context, value string) (Status, error) {
 	m.status.Busy = true
 	m.status.Phase = "updating"
 	m.status.Message = "Đang đăng ký tên và cập nhật IP…"
-	m.mu.Unlock()
+	// Publish the wake-up with the state. Startup must not observe the new
+	// pending name before its notification and run the same claim twice.
 	select {
 	case m.wake <- struct{}{}:
 	default:
 	}
+	m.mu.Unlock()
 	return m.Snapshot(), nil
 }
 func (m *Manager) save(ctx context.Context, state savedState) error {
