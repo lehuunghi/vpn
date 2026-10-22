@@ -6,6 +6,7 @@ Tải **VPN20-1.0.0-windows.2-windows-x64-setup.exe**, chạy với quyền Admi
 - Bổ sung chế độ `routed` không cần WinNAT; `nat` vẫn có thể yêu cầu NAT bắt buộc. Lỗi driver/firewall/cô lập vẫn được báo và ngăn khởi động.
 - Cài mới mặc định chỉ định tuyến subnet VPN, giữ Internet/DNS của máy khách. Với dữ liệu cũ, chọn **Cài đặt → Chỉ mạng VPN · cho phép ping / remote → Lưu**, kiểm tra giá trị riêng của từng thiết bị rồi tải lại cấu hình.
 - Tải **Enable-VPN20-PeerAccess.ps1** và chạy trên từng máy Windows nhận kết nối bằng PowerShell quản trị. Script mở ping trên adapter VPN; thêm `-EnableRemoteDesktop` để bật RDP với NLA và quy tắc TCP/UDP giới hạn trong subnet VPN. `-Undo` hoàn tác các quy tắc và thiết lập RDP đã lưu. Script trong Assets mặc định subnet `10.8.0.0/24`; tải từ giao diện quản trị để lấy đúng subnet tùy chỉnh.
+- Chờ mở lại cổng quản trị tối đa 10 giây khi Windows báo cổng tạm chưa dùng được sau khởi động lại. Nếu cổng vẫn bị chiếm/giữ, bộ cài hiển thị lỗi thực tế và trả mã lỗi thay vì báo cài thành công.
 - Bộ cài hiển thị lỗi khởi động thực tế và phần cuối nhật ký. Có thể dừng/gỡ dịch vụ ngay cả khi tệp cấu hình bị lỗi.
 - Dịch vụ tự chạy khi bật máy, trước đăng nhập, có cơ chế tự khởi động lại. Giữ các chức năng quản trị, QR, thống kê, 2FA, TLS và API từ bản trước.
 

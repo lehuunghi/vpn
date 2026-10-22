@@ -77,7 +77,20 @@ try {
     $status = Invoke-RestMethod "$base/api/status" -Headers $headers -WebSession $session
     if ($status.networkMode -ne 'routed' -or !$status.networkWarning) { throw 'Installer did not start in routed mode' }
     if (Get-NetNat -Name VPN20 -ErrorAction SilentlyContinue) { throw 'Routed mode unexpectedly enabled VPN20 NAT' }
-    Write-Output 'PASS: install, automatic service, UI/API, peer config/QR, scoped ping/RDP helper and undo, restart/persistence, upgrade without NAT'
+    # A service failure must make silent Setup fail, with actionable details.
+    & "$app\vpn20.exe" stop-service
+    if ($LASTEXITCODE) { throw 'Could not stop before testing a port conflict' }
+    $blocker = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 51821)
+    $blocker.Start()
+    try {
+        $p = Start-Process -FilePath $Installer -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-' -Wait -PassThru
+        if ($p.ExitCode -eq 0) { throw 'Installer reported success with a blocked administration port' }
+        if ((Get-Content "$data\install-error.txt" -Raw) -notmatch 'listen.*51821') { throw 'Installer did not preserve the actual port error' }
+    } finally { $blocker.Stop() }
+    $p = Start-Process -FilePath $Installer -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-' -Wait -PassThru
+    if ($p.ExitCode -ne 0) { throw 'Installer did not recover after releasing the administration port' }
+    $null = Invoke-RestMethod "$base/api/health"
+    Write-Output 'PASS: install, automatic service, UI/API, peer config/QR, scoped ping/RDP helper and undo, restart/persistence, routed upgrade, failed-install exit code and recovery'
 } finally {
     if (Test-Path "$app\unins000.exe") {
         $p=Start-Process "$app\unins000.exe" -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait -PassThru

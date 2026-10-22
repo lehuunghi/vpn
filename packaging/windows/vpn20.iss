@@ -54,9 +54,22 @@ Name: "{group}\Uninstall VPN20"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\VPN20"; Filename: "http://127.0.0.1:51821"; IconFilename: "{app}\vpn20.ico"; Tasks: desktopicon
 
 [Run]
-Filename: "http://127.0.0.1:51821"; Description: "Open VPN20 administration"; Flags: shellexec postinstall nowait skipifsilent runasoriginaluser
+Filename: "http://127.0.0.1:51821"; Description: "Open VPN20 administration"; Flags: shellexec postinstall nowait skipifsilent runasoriginaluser; Check: ServiceReady
 
 [Code]
+var
+  StartupFailed: Boolean;
+
+function ServiceReady(): Boolean;
+begin
+  Result := not StartupFailed;
+end;
+
+function GetCustomSetupExitCode(): Integer;
+begin
+  if StartupFailed then Result := 1 else Result := 0;
+end;
+
 function RunServiceCommand(Command: String): Boolean;
 var
   ExitCode: Integer;
@@ -82,6 +95,7 @@ begin
   if CurStep = ssPostInstall then
     if not RunServiceCommand('install-service') then
     begin
+      StartupFailed := True;
       Detail := 'VPN20 could not start.';
       if LoadStringsFromFile(ExpandConstant('{commonappdata}\VPN20\install-error.txt'), Lines) then
         for I := 0 to GetArrayLength(Lines) - 1 do

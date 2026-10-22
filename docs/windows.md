@@ -160,7 +160,11 @@ quyền ghi, chép `config.example.json` vào đường dẫn cấu hình mặc 
 - Bộ cài báo không khởi động được: hộp thoại hiển thị lỗi cụ thể và phần cuối
   nhật ký; xem thêm `install-error.txt` và `vpn20.log`. Kiểm tra JSON cấu hình,
   subnet trùng LAN, cổng UDP, quyền quản trị và phần mềm bảo mật chặn driver.
-  Thiếu WinNAT không còn ngăn khởi động chế độ `auto`/`routed`.
+  Thiếu WinNAT không còn ngăn khởi động chế độ `auto`/`routed`. Nếu lỗi bind
+  cổng quản trị vẫn còn sau 10 giây chờ, kiểm tra cổng TCP đang bị dùng hoặc
+  Windows dành riêng; chọn `VPN20_HTTP_LISTEN` khác trong JSON rồi chạy lại
+  bộ cài. Khi đổi cổng, mở trình duyệt bằng địa chỉ mới; shortcut vẫn trỏ
+  đến cổng mặc định 51821.
 - Đã bắt tay nhưng không ping/remote: kiểm tra AllowedIPs, cô lập thiết bị và
   firewall của máy đích; chạy helper trên máy đích. RDP cần phiên bản Windows
   hỗ trợ nhận kết nối, dịch vụ TermService và tài khoản có quyền/mật khẩu.
@@ -187,7 +191,8 @@ qua định tuyến không NAT, xác nhận cô lập WFP, truy vấn DNS qua Wi
 thống kê và thêm/xóa thiết bị. Các ca PowerShell 5.1 mô phỏng nhà cung cấp
 NetNat bị thiếu và NAT đang được dùng. Kiểm tra bộ cài xác nhận dịch vụ
 automatic, giao diện/API, cấu hình, helper ping/RDP và hoàn tác, khởi động lại,
-lưu dữ liệu, nâng cấp chế độ routed và gỡ. Phép thử TCP không xác minh phiên
+lưu dữ liệu, nâng cấp chế độ routed, mã thoát lỗi khi cổng quản trị bị chiếm,
+khôi phục sau khi giải phóng cổng và gỡ. Phép thử TCP không xác minh phiên
 đăng nhập RDP/đồ họa từ đầu đến cuối. Không chạy các phép thử tích hợp trên máy sản xuất.
 
 Workflow `Windows release` chỉ phát hành sau khi kiểm tra Linux và Windows

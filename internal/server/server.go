@@ -79,7 +79,7 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 		}
 		s.http.TLSConfig = tlsCfg
 	}
-	ln, err := net.Listen("tcp", s.cfg.HTTP)
+	ln, err := listenAdmin(ctx, s.cfg.HTTP)
 	if err != nil {
 		return fmt.Errorf("listen %s: %w", s.cfg.HTTP, err)
 	}
