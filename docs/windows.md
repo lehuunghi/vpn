@@ -30,7 +30,7 @@ mở ra Internet. Có thể bật HTTPS và đổi địa chỉ lắng nghe tron
 
 - Windows 10 1607+ (build 14393+), Windows 11; Home/Pro/Enterprise/Education/LTSC.
   Windows Server 2016/2019/2022/2025 và Server Core. x86 dành cho Windows
-  32-bit; x64 cho Intel/AMD 64-bit; Bộ cài Windows ARM64 không được cung cấp.
+  32-bit; x64 cho Intel/AMD 64-bit. Bộ cài Windows ARM64 không được cung cấp.
   Windows 7/8/8.1 và Server 2012/R2 nằm ngoài yêu cầu tối thiểu của Go hiện tại.
   Relay không yêu cầu WinNAT. Windows Home có thể nhận ping và dùng
   ứng dụng RDP để kết nối ra; nhận Microsoft RDP cần Pro/Enterprise/Education

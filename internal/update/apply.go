@@ -221,7 +221,7 @@ func Health(ctx context.Context, address, certificate, version string) error {
 		tlsConfig := &tls.Config{RootCAs: roots, MinVersion: tls.VersionTLS12}
 		if block, _ := pem.Decode(b); block != nil {
 			if leaf, err := x509.ParseCertificate(block.Bytes); err == nil && len(leaf.DNSNames) > 0 {
-				tlsConfig.ServerName = leaf.DNSNames[0]
+				tlsConfig.ServerName = strings.Replace(leaf.DNSNames[0], "*.", "vpn20.", 1)
 			}
 		}
 		transport.TLSClientConfig = tlsConfig

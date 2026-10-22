@@ -6,7 +6,9 @@ if ($env:VPN20_SIGN_PFX_BASE64) {
     try {
         [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:VPN20_SIGN_PFX_BASE64))
         $password = ConvertTo-SecureString $env:VPN20_SIGN_PFX_PASSWORD -AsPlainText -Force
-        $cert = Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $password
+        $certs = @(Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $password | Where-Object { $_.HasPrivateKey })
+        if ($certs.Count -ne 1) { throw 'The signing PFX must contain exactly one signing certificate with a private key' }
+        $cert = $certs[0]
         $env:VPN20_SIGN_CERTIFICATE_THUMBPRINT = $cert.Thumbprint
     } finally { Remove-Item -LiteralPath $pfx -Force -ErrorAction SilentlyContinue }
 }

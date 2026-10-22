@@ -32,10 +32,10 @@ SolidCompression=yes
 WizardStyle=modern
 PrivilegesRequired=admin
 #if Architecture == "x64"
-ArchitecturesAllowed=x64compatible
-ArchitecturesInstallIn64BitMode=x64compatible
+ArchitecturesAllowed=x64os
+ArchitecturesInstallIn64BitMode=x64os
 #else
-ArchitecturesAllowed=x86compatible
+ArchitecturesAllowed=x86compatible and not arm64
 #endif
 MinVersion=10.0.14393
 CloseApplications=no
