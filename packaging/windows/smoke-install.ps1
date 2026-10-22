@@ -6,11 +6,13 @@ $app = Join-Path $env:ProgramFiles 'VPN20'
 if ($Architecture -eq 'x86' -and ${env:ProgramFiles(x86)}) { $app = Join-Path ${env:ProgramFiles(x86)} 'VPN20' }
 $data = Join-Path $env:ProgramData 'VPN20'
 $installed = $false
+$adminPort = 51821
 try {
-    # Hyper-V/HNS can reserve the default UDP port on a hosted runner. Exercise
+    # Hyper-V/HNS can reserve default UDP/TCP ports on a hosted runner. Exercise
     # the supported custom-port configuration in that case, without deleting
     # exclusions or changing another application's network configuration.
     if (!(Test-Path "$data\config.json")) {
+        $seed = @{}
         $probe = [Net.Sockets.UdpClient]::new([Net.Sockets.AddressFamily]::InterNetwork)
         try { $probe.Client.Bind([Net.IPEndPoint]::new([Net.IPAddress]::Any, 51820)) }
         catch {
@@ -20,11 +22,28 @@ try {
             $probe.Dispose()
             $probe = [Net.Sockets.UdpClient]::new([Net.IPEndPoint]::new([Net.IPAddress]::Any, 0))
             $port = [string]$probe.Client.LocalEndPoint.Port
-            $null = New-Item -ItemType Directory -Force $data
-            [IO.File]::WriteAllText("$data\config.json", (@{VPN20_PORT=$port} | ConvertTo-Json), [Text.UTF8Encoding]::new($false))
+            $seed.VPN20_PORT = $port
             Write-Output "Default UDP port is unavailable on this runner; testing configured VPN20_PORT=$port"
         } finally { $probe.Dispose() }
+        $tcp = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, $adminPort)
+        try { $tcp.Start() }
+        catch {
+            $failure = $_.Exception
+            while ($failure.InnerException) { $failure = $failure.InnerException }
+            if ($failure -isnot [Net.Sockets.SocketException] -or $failure.NativeErrorCode -notin @(10013,10048)) { throw }
+            $tcp.Stop()
+            $tcp = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0)
+            $tcp.Start()
+            $adminPort = $tcp.LocalEndpoint.Port
+            $seed.VPN20_HTTP_LISTEN = "127.0.0.1:$adminPort"
+            Write-Output "Default TCP port is unavailable on this runner; testing configured VPN20_HTTP_LISTEN=127.0.0.1:$adminPort"
+        } finally { $tcp.Stop() }
+        if ($seed.Count) {
+            $null = New-Item -ItemType Directory -Force $data
+            [IO.File]::WriteAllText("$data\config.json", ($seed | ConvertTo-Json), [Text.UTF8Encoding]::new($false))
+        }
     }
+    $base = "http://127.0.0.1:$adminPort"
     $p = Start-Process -FilePath $Installer -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-' -Wait -PassThru
     if ($p.ExitCode -ne 0) { throw "Installer exited $($p.ExitCode)" }
     $installed = $true
@@ -37,12 +56,11 @@ try {
     foreach ($ace in $acl.Access) {
         if ($ace.AccessControlType -eq 'Allow' -and $broadSids -contains $ace.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value) { throw 'VPN20 private data is accessible to non-administrators' }
     }
-    $health = Invoke-WebRequest 'http://127.0.0.1:51821/api/health' -UseBasicParsing
+    $health = Invoke-WebRequest "$base/api/health" -UseBasicParsing
     if ($health.StatusCode -ne 200) { throw 'Health endpoint failed' }
-    $page = Invoke-WebRequest 'http://127.0.0.1:51821/' -UseBasicParsing
+    $page = Invoke-WebRequest "$base/" -UseBasicParsing
     if ($page.Content -notmatch '<html') { throw 'Embedded administration UI is missing' }
     # Create a real administrator and device through the installed API.
-    $base = 'http://127.0.0.1:51821'
     $headers = @{Origin=$base}
     $body = @{username='releaseadmin';password='VPN20-release-test-only!82';endpointHost='vpn.example.com'} | ConvertTo-Json
     $null = Invoke-RestMethod "$base/api/setup" -Method Post -ContentType 'application/json' -Headers $headers -Body $body -SessionVariable session
@@ -109,12 +127,12 @@ try {
     # A service failure must make silent Setup fail, with actionable details.
     & "$app\vpn20.exe" stop-service
     if ($LASTEXITCODE) { throw 'Could not stop before testing a port conflict' }
-    $blocker = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 51821)
+    $blocker = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, $adminPort)
     $blocker.Start()
     try {
         $p = Start-Process -FilePath $Installer -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-' -Wait -PassThru
         if ($p.ExitCode -eq 0) { throw 'Installer reported success with a blocked administration port' }
-        if ((Get-Content "$data\install-error.txt" -Raw) -notmatch 'listen.*51821') { throw 'Installer did not preserve the actual port error' }
+        if ((Get-Content "$data\install-error.txt" -Raw) -notmatch "listen.*$adminPort") { throw 'Installer did not preserve the actual port error' }
     } finally { $blocker.Stop() }
     $p = Start-Process -FilePath $Installer -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-' -Wait -PassThru
     if ($p.ExitCode -ne 0) { throw 'Installer did not recover after releasing the administration port' }

@@ -106,11 +106,14 @@ func exists(path string) bool { _, err := os.Stat(path); return err == nil }
 func (m *Manager) Status() Status {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	// Writers commit state before releasing the lock. Read it first so an
+	// idle response cannot pair an old phase with a newly released lock.
+	busy := exists(filepath.Join(m.root, "active"))
 	j := readJob(m.root)
 	if j.Phase == "" {
 		j.Phase = "idle"
 	}
-	return Status{Current: m.opts.Version, Method: m.mode, Supported: m.reason == "", Reason: m.reason, Busy: exists(filepath.Join(m.root, "active")), Latest: m.candidate, CheckedAt: m.checkedAt, Job: j, Signing: m.signing}
+	return Status{Current: m.opts.Version, Method: m.mode, Supported: m.reason == "", Reason: m.reason, Busy: busy, Latest: m.candidate, CheckedAt: m.checkedAt, Job: j, Signing: m.signing}
 }
 
 func (m *Manager) Check(ctx context.Context) (Status, error) {
@@ -273,7 +276,17 @@ func writeJSON(path string, v any) error {
 	if err != nil {
 		return err
 	}
-	return os.Rename(tmp, path)
+	// Windows readers and antivirus scanners may briefly hold the previous
+	// file without FILE_SHARE_DELETE. Preserve atomic replacement and retry
+	// those short locks instead of silently retaining an earlier job phase.
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		err = os.Rename(tmp, path)
+		if err == nil || runtime.GOOS != "windows" || time.Now().After(deadline) {
+			return err
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 func copyFile(src, dst string, mode os.FileMode) error {
