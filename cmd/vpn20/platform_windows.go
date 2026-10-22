@@ -4,15 +4,22 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/lehuunghi/vpn/internal/config"
+	"github.com/lehuunghi/vpn/internal/engine"
 
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/svc"
@@ -194,7 +201,7 @@ func manageService(action string) error {
 	if err != nil {
 		return err
 	}
-	cfg := mgr.Config{DisplayName: "VPN20 WireGuard Server", Description: "VPN20 VPN server and local administration interface", StartType: mgr.StartAutomatic, DelayedAutoStart: true, Dependencies: []string{"Tcpip", "BFE"}}
+	cfg := mgr.Config{ServiceType: windows.SERVICE_WIN32_OWN_PROCESS, ErrorControl: mgr.ErrorNormal, ServiceStartName: "LocalSystem", DisplayName: "VPN20 WireGuard Server", Description: "VPN20 VPN server and local administration interface", StartType: mgr.StartAutomatic, DelayedAutoStart: true, Dependencies: []string{"Tcpip", "BFE"}}
 	if s != nil {
 		defer s.Close()
 		if err = stopWindowsService(s); err != nil {
@@ -224,15 +231,15 @@ func manageService(action string) error {
 		return err
 	}
 	// The installer must not report success while the API or data plane failed.
-	client := &http.Client{Timeout: time.Second}
+	appConfig, err := config.FromEnv()
+	if err != nil {
+		_ = stopWindowsService(s)
+		return err
+	}
 	deadline := time.Now().Add(40 * time.Second)
 	for time.Now().Before(deadline) {
-		resp, e := client.Get("http://127.0.0.1:51821/api/health")
-		if e == nil {
-			_ = resp.Body.Close()
-			if resp.StatusCode == http.StatusOK {
-				return nil
-			}
+		if windowsHealthReady(appConfig) {
+			return nil
 		}
 		status, e := s.Query()
 		if e != nil {
@@ -245,4 +252,63 @@ func manageService(action string) error {
 	}
 	_ = stopWindowsService(s)
 	return fmt.Errorf("VPN20 did not become ready; see %s", filepath.Join(dir, "vpn20.log"))
+}
+
+// Probe the configured listener, including custom ports and local TLS. Trust
+// the installed certificate explicitly rather than disabling TLS validation.
+func windowsHealthReady(cfg *config.Config) bool {
+	host, port, err := net.SplitHostPort(cfg.HTTP)
+	if err != nil {
+		return false
+	}
+	if host == "" || host == "0.0.0.0" {
+		host = "127.0.0.1"
+	}
+	if host == "::" {
+		host = "::1"
+	}
+	scheme := "http"
+	transport := &http.Transport{}
+	defer transport.CloseIdleConnections()
+	if cfg.TLSEnabled() {
+		scheme = "https"
+		path := cfg.TLSCert
+		if path == "" {
+			path = filepath.Join(cfg.DataDir, "tls.crt")
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return false
+		}
+		block, _ := pem.Decode(data)
+		if block == nil {
+			return false
+		}
+		cert, err := x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			return false
+		}
+		roots := x509.NewCertPool()
+		if !roots.AppendCertsFromPEM(data) {
+			return false
+		}
+		name := host
+		if len(cert.DNSNames) > 0 {
+			name = strings.Replace(cert.DNSNames[0], "*.", "vpn20.", 1)
+		} else if len(cert.IPAddresses) > 0 {
+			name = cert.IPAddresses[0].String()
+		}
+		transport.TLSClientConfig = &tls.Config{RootCAs: roots, ServerName: name, MinVersion: tls.VersionTLS12}
+	}
+	client := &http.Client{Timeout: time.Second, Transport: transport}
+	resp, err := client.Get(scheme + "://" + net.JoinHostPort(host, port) + "/api/health")
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	var health struct {
+		OK      bool   `json:"ok"`
+		Version string `json:"version"`
+	}
+	return resp.StatusCode == http.StatusOK && json.NewDecoder(resp.Body).Decode(&health) == nil && health.OK && health.Version == engine.Version
 }

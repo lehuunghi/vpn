@@ -11,6 +11,12 @@ try {
     $service = Get-CimInstance Win32_Service -Filter "Name='VPN20'"
     if ($service.StartMode -ne 'Auto' -or $service.State -ne 'Running') { throw 'VPN20 is not an automatic running service' }
     if ($service.StartName -ne 'LocalSystem') { throw 'Unexpected service account' }
+    if ((Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Services\VPN20').DelayedAutoStart -ne 1) { throw 'Delayed automatic startup was not configured' }
+    $acl = Get-Acl $data
+    $broadSids = @('S-1-1-0', 'S-1-5-11', 'S-1-5-32-545')
+    foreach ($ace in $acl.Access) {
+        if ($ace.AccessControlType -eq 'Allow' -and $broadSids -contains $ace.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value) { throw 'VPN20 private data is accessible to non-administrators' }
+    }
     $health = Invoke-WebRequest 'http://127.0.0.1:51821/api/health' -UseBasicParsing
     if ($health.StatusCode -ne 200) { throw 'Health endpoint failed' }
     $page = Invoke-WebRequest 'http://127.0.0.1:51821/' -UseBasicParsing

@@ -17,7 +17,6 @@ import (
 
 	"github.com/tailscale/wf"
 	"golang.org/x/sys/windows"
-	"golang.zx2c4.com/wireguard/windows/tunnel/winipcfg"
 )
 
 //go:embed windows_network.ps1
@@ -73,10 +72,6 @@ func Apply(ctx context.Context, r Rules) error {
 	if err != nil {
 		return err
 	}
-	luid, err := winipcfg.LUIDFromIndex(uint32(iface.Index))
-	if err != nil {
-		return err
-	}
 	// Build replacement filters before removing the old filters. Failure must
 	// never silently turn isolation off. Dynamic objects disappear on a crash.
 	session, err := wf.New(&wf.Options{Name: "VPN20 peer isolation", Dynamic: true})
@@ -104,8 +99,8 @@ func Apply(ctx context.Context, r Rules) error {
 				return err
 			}
 			err = session.AddRule(&wf.Rule{ID: wf.RuleID(id), Name: "VPN20 block peer-to-peer forwarding", Layer: layer, Sublayer: sub, Weight: 1, Action: wf.ActionBlock, Conditions: []*wf.Match{
-				{Field: wf.FieldIPArrivalInterface, Op: wf.MatchTypeEqual, Value: uint64(luid)},
-				{Field: wf.FieldIPNexthopInterface, Op: wf.MatchTypeEqual, Value: uint64(luid)},
+				{Field: wf.FieldSourceInterfaceIndex, Op: wf.MatchTypeEqual, Value: uint32(iface.Index)},
+				{Field: wf.FieldDestinationInterfaceIndex, Op: wf.MatchTypeEqual, Value: uint32(iface.Index)},
 			}})
 			if err != nil {
 				return fmt.Errorf("install peer isolation: %w", err)
