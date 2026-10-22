@@ -57,7 +57,7 @@ install -d -m 0700 /etc/vpn20 /var/lib/vpn20
 if [[ ! -f /etc/vpn20/vpn20.env ]]; then
   cat > /etc/vpn20/vpn20.env <<'ENV'
 VPN20_DATA_DIR=/var/lib/vpn20
-VPN20_HTTP_LISTEN=127.0.0.1:51821
+VPN20_HTTP_LISTEN=0.0.0.0:51821
 VPN20_BACKEND=auto
 VPN20_UPDATE_MODE=systemd
 ENV
@@ -73,4 +73,4 @@ install -m 0644 "$work/LICENSE" "$work/NOTICE" /usr/share/doc/vpn20/
 install -m 0644 "$unit" /etc/systemd/system/vpn20.service
 systemctl daemon-reload
 systemctl enable --now vpn20.service
-echo 'Installed. Open http://127.0.0.1:51821 (or use an SSH tunnel); configure your public endpoint and UDP firewall/router.'
+echo 'Installed. Open http://<server-LAN-IP>:51821; allow TCP 51821 from your LAN in the host firewall. Configure the public endpoint and UDP firewall/router.'

@@ -289,6 +289,7 @@ func (e *Engine) applyFirewall(ctx context.Context) error {
 		Iface:         e.cfg.Iface,
 		Egress:        egress,
 		ListenPort:    e.cfg.ListenPort,
+		AdminListen:   e.cfg.HTTP,
 		Subnets:       e.tunnelSubnets(),
 		PeerIsolation: s.PeerIsolation,
 		ClampMSS:      s.ClampMSS,

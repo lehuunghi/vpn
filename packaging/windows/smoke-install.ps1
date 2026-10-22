@@ -25,18 +25,18 @@ try {
             $seed.VPN20_PORT = $port
             Write-Output "Default UDP port is unavailable on this runner; testing configured VPN20_PORT=$port"
         } finally { $probe.Dispose() }
-        $tcp = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, $adminPort)
+        $tcp = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Any, $adminPort)
         try { $tcp.Start() }
         catch {
             $failure = $_.Exception
             while ($failure.InnerException) { $failure = $failure.InnerException }
             if ($failure -isnot [Net.Sockets.SocketException] -or $failure.NativeErrorCode -notin @(10013,10048)) { throw }
             $tcp.Stop()
-            $tcp = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0)
+            $tcp = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Any, 0)
             $tcp.Start()
             $adminPort = $tcp.LocalEndpoint.Port
-            $seed.VPN20_HTTP_LISTEN = "127.0.0.1:$adminPort"
-            Write-Output "Default TCP port is unavailable on this runner; testing configured VPN20_HTTP_LISTEN=127.0.0.1:$adminPort"
+            $seed.VPN20_HTTP_LISTEN = "0.0.0.0:$adminPort"
+            Write-Output "Default TCP port is unavailable on this runner; testing configured VPN20_HTTP_LISTEN=0.0.0.0:$adminPort"
         } finally { $tcp.Stop() }
         if ($seed.Count) {
             $null = New-Item -ItemType Directory -Force $data
@@ -58,6 +58,14 @@ try {
     }
     $health = Invoke-WebRequest "$base/api/health" -UseBasicParsing
     if ($health.StatusCode -ne 200) { throw 'Health endpoint failed' }
+    $adminRule = Get-NetFirewallRule -Name 'VPN20-Admin-LAN'
+    if ((@($adminRule | Get-NetFirewallAddressFilter).RemoteAddress -join ',') -ne 'LocalSubnet') { throw 'Admin firewall must be limited to the LAN' }
+    $portFilter = $adminRule | Get-NetFirewallPortFilter
+    if ($portFilter.Protocol -ne 'TCP' -or [int]$portFilter.LocalPort -ne $adminPort) { throw 'Admin firewall did not follow the configured TCP port' }
+    $lanAddress = Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -ne 'wg0' -and $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.254.*' -and $_.AddressState -eq 'Preferred' } | Select-Object -First 1
+    if (!$lanAddress) { throw 'LAN integration test requires an IPv4 interface' }
+    $lanHealth = Invoke-RestMethod "http://$($lanAddress.IPAddress):$adminPort/api/health"
+    if (!$lanHealth.ok) { throw 'Admin listener is not reachable through the actual LAN IP' }
     $page = Invoke-WebRequest "$base/" -UseBasicParsing
     if ($page.Content -notmatch '<html') { throw 'Embedded administration UI is missing' }
     # Create a real administrator and device through the installed API.
@@ -84,10 +92,20 @@ try {
     & "$app\vpn20.exe" stop-service
     if ($LASTEXITCODE) { throw 'Service stop failed' }
     if (Get-NetNat -Name VPN20 -ErrorAction SilentlyContinue) { throw 'VPN20 NAT was not cleaned up' }
+    if (Get-NetFirewallRule -Name 'VPN20-Admin-LAN' -ErrorAction SilentlyContinue) { throw 'Admin LAN rule was not cleaned up' }
+    # Reproduce an older loopback-only installation, then opt in using the CLI.
+    $settings = Get-Content "$data\config.json" -Raw | ConvertFrom-Json
+    $settings | Add-Member -NotePropertyName VPN20_HTTP_LISTEN -NotePropertyValue "127.0.0.1:$adminPort" -Force
+    $settings | ConvertTo-Json | Set-Content "$data\config.json" -Encoding utf8NoBOM
     Start-Service VPN20
     for ($i=0; $i -lt 40; $i++) {
         try { $null=Invoke-RestMethod "$base/api/health"; break } catch { Start-Sleep -Milliseconds 500 }
     }
+    if (Get-NetFirewallRule -Name 'VPN20-Admin-LAN' -ErrorAction SilentlyContinue) { throw 'Loopback listener unexpectedly opened LAN firewall' }
+    & "$app\vpn20.exe" enable-lan
+    if ($LASTEXITCODE) { throw 'LAN opt-in command failed' }
+    if ((Get-Content "$data\config.json" -Raw | ConvertFrom-Json).VPN20_HTTP_LISTEN -ne "0.0.0.0:$adminPort") { throw 'LAN command lost the configured port' }
+    $null = Invoke-RestMethod "http://$($lanAddress.IPAddress):$adminPort/api/health"
     $null=Invoke-RestMethod "$base/api/auth/login" -Method Post -ContentType 'application/json' -Headers $headers -Body (@{username='releaseadmin';password='VPN20-release-test-only!82'} | ConvertTo-Json) -SessionVariable session
     $saved = @(Invoke-RestMethod "$base/api/peers" -Headers $headers -WebSession $session)
     if ($saved.Count -ne 1 -or $saved[0].id -ne $peer.id) { throw 'Service restart lost saved devices' }
@@ -137,7 +155,7 @@ try {
     $p = Start-Process -FilePath $Installer -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-' -Wait -PassThru
     if ($p.ExitCode -ne 0) { throw 'Installer did not recover after releasing the administration port' }
     $null = Invoke-RestMethod "$base/api/health"
-    Write-Output 'PASS: install, automatic service, UI/API, peer config/QR, scoped ping/RDP helper and undo, restart/persistence, routed upgrade, failed-install exit code and recovery'
+    Write-Output 'PASS: install, actual LAN IP, scoped admin TCP firewall, loopback opt-in, automatic service, UI/API, peer config/QR, scoped ping/RDP helper and undo, restart/persistence, routed upgrade, failed-install exit code and recovery'
 } finally {
     if (Test-Path "$app\unins000.exe") {
         $p=Start-Process "$app\unins000.exe" -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait -PassThru

@@ -14,3 +14,4 @@ internal/server/static/dist/*
 *.db-shm
 *.log
 .env
+/secrets/

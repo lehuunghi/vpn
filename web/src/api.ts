@@ -115,6 +115,23 @@ export interface Settings {
   connectedWindow: number;
 }
 
+export interface PublicAccessStatus {
+  available: boolean;
+  reason?: string;
+  domain: string;
+  subdomain: string;
+  autoIPv4: boolean;
+  ipv4: string;
+  hostname?: string;
+  registered: boolean;
+  lastIP?: string;
+  lastSync?: string;
+  error?: string;
+  listen: string;
+  loopbackOnly: boolean;
+  lanURLs: string[] | null;
+}
+
 export interface Totals {
   peers: number;
   active: number;
@@ -218,6 +235,10 @@ export interface UpdateStatus {
 // --- endpoints --------------------------------------------------------------
 
 export const api = {
+  publicAccess: () => get<PublicAccessStatus>("/api/public-access"),
+  savePublicAccess: (body: { subdomain: string; autoIPv4: boolean; ipv4: string; useEndpoint: boolean }) => put<PublicAccessStatus>("/api/public-access", body),
+  checkPublicAccess: () => post<PublicAccessStatus>("/api/public-access/check"),
+  deletePublicAccess: () => del<PublicAccessStatus>("/api/public-access"),
   updateStatus: () => get<UpdateStatus>("/api/update"),
   checkUpdate: () => post<UpdateStatus>("/api/update/check"),
   startUpdate: () => post<UpdateStatus["job"]>("/api/update"),

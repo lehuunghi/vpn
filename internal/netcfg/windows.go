@@ -63,8 +63,12 @@ func networkStatePath() string {
 func Apply(ctx context.Context, r Rules) error {
 	firewall.Lock()
 	defer firewall.Unlock()
+	adminPort, err := lanAdminPort(r.AdminListen)
+	if err != nil {
+		return err
+	}
 	if r.Relay {
-		_, err := powershell(ctx, networkScript+fmt.Sprintf("\nSet-VPN20RelayNetwork -Port %d -Tunnel %s -StatePath %s", r.ListenPort, psQuote(r.Iface), psQuote(networkStatePath())))
+		_, err := powershell(ctx, networkScript+fmt.Sprintf("\nSet-VPN20RelayNetwork -Port %d -AdminPort %d -Tunnel %s -StatePath %s", r.ListenPort, adminPort, psQuote(r.Iface), psQuote(networkStatePath())))
 		return err
 	}
 	if r.ClampMSS {
@@ -126,7 +130,7 @@ func Apply(ctx context.Context, r Rules) error {
 	if mode == "" {
 		mode = "auto"
 	}
-	out, err := powershell(ctx, networkScript+fmt.Sprintf("\nSet-VPN20Network -Tunnel %s -Uplink %s -Subnet %s -Port %d -StatePath %s -Mode %s -IPv6:%s | ConvertTo-Json -Compress", psQuote(r.Iface), psQuote(r.Egress), psQuote(subnet), r.ListenPort, psQuote(networkStatePath()), psQuote(mode), ipv6))
+	out, err := powershell(ctx, networkScript+fmt.Sprintf("\nSet-VPN20Network -Tunnel %s -Uplink %s -Subnet %s -Port %d -AdminPort %d -StatePath %s -Mode %s -IPv6:%s | ConvertTo-Json -Compress", psQuote(r.Iface), psQuote(r.Egress), psQuote(subnet), r.ListenPort, adminPort, psQuote(networkStatePath()), psQuote(mode), ipv6))
 	if err != nil {
 		return err
 	}

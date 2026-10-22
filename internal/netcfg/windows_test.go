@@ -90,3 +90,24 @@ function New-NetFirewallRule { param([string]$Name,[string]$DisplayName,[string]
 		t.Fatalf("relay firewall without WinNAT: %q %v", out, err)
 	}
 }
+
+func TestWindowsAdminFirewallIsLANOnly(t *testing.T) {
+	script := networkScript + `
+$global:adminRules = 0
+function Get-NetNat { }
+function Get-NetFirewallRule { }
+function Remove-NetFirewallRule { }
+function New-NetFirewallRule {
+    param([string]$Name,[string]$DisplayName,[string]$Group,[string]$Direction,[string]$Action,[string]$Protocol,[int]$LocalPort,[string]$Profile,[string]$InterfaceAlias,[string]$RemoteAddress)
+    if ($Name -eq 'VPN20-Admin-LAN') {
+        if ($Protocol -ne 'TCP' -or $LocalPort -ne 51999 -or $RemoteAddress -ne 'LocalSubnet' -or $Direction -ne 'Inbound' -or $Group -ne 'VPN20') { throw 'Admin firewall has incorrect port or scope' }
+        $global:adminRules++
+    }
+}
+`
+	script += fmt.Sprintf("\nSet-VPN20RelayNetwork -Port 51820 -AdminPort 51999 -Tunnel wg0 -StatePath %s; $global:adminRules", psQuote(filepath.Join(t.TempDir(), "state.json")))
+	out, err := powershell(context.Background(), script)
+	if err != nil || out != "1" {
+		t.Fatalf("LAN admin firewall: %q %v", out, err)
+	}
+}

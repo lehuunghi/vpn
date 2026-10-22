@@ -3,6 +3,7 @@ import { api, type Settings } from "../api";
 import { errorMessage, useAuth, useLive, useToast } from "../state";
 import { Check, Field } from "../components/ui";
 import { Updater } from "../components/Updater";
+import { PublicAccess } from "../components/PublicAccess";
 
 export function SettingsPage() {
   const { me } = useAuth();
@@ -13,12 +14,11 @@ export function SettingsPage() {
   const [busy, setBusy] = useState(false);
   const [platform, setPlatform] = useState("");
   const [backend, setBackend] = useState("");
-  const [vpnRoutes, setVPNRoutes] = useState("");
   const readOnly = me?.role !== "admin";
 
   useEffect(() => {
     api.settings().then(setS).catch((e) => setError(errorMessage(e)));
-    api.status().then((status) => { setPlatform(status.platform); setBackend(status.backend); setVPNRoutes([status.subnet4, status.subnet6].filter(Boolean).join(", ")); }).catch((e) => setError(errorMessage(e)));
+    api.status().then((status) => { setPlatform(status.platform); setBackend(status.backend); }).catch((e) => setError(errorMessage(e)));
   }, [settingsVersion]);
 
   async function submit(e: FormEvent) {
@@ -49,7 +49,6 @@ export function SettingsPage() {
       </div>
       <form onSubmit={submit} className="stack">
         {error && <div className="error">{error}</div>}
-        {platform === "windows" && <div className="notice">{backend === "relay" ? "Chuyển tiếp TCP/UDP và ping qua mạng máy chủ, hỗ trợ IPv4/IPv6 và điều chỉnh TCP MSS. Máy trong LAN nhận kết nối từ IP của máy chủ; không cần thêm tuyến VPN trên router. IPv6 ra ngoài cần kết nối IPv6 trên máy chủ." : "Chế độ WireGuardNT dùng WinNAT cho IPv4 và định tuyến IPv6. Chọn chế độ relay để chuyển tiếp qua mạng máy chủ và hỗ trợ điều chỉnh TCP MSS."}</div>}
         {readOnly && <div className="notice">Bạn có vai trò chỉ xem nên không thể chỉnh sửa cài đặt.</div>}
         <div className="card">
           <div className="card-head">
@@ -75,11 +74,8 @@ export function SettingsPage() {
               <Field label="DNS" hint="Phân tách bằng dấu phẩy. Thiết bị dùng các DNS này khi kết nối. Để trống nếu không cấp DNS.">
                 <input className="input" value={s.dns} onChange={(e) => set("dns", e.target.value)} disabled={readOnly} />
               </Field>
-              <Field label="Định tuyến thiết bị (AllowedIPs)" hint="0.0.0.0/0, ::/0 gửi toàn bộ lưu lượng qua VPN.">
+              <Field label="AllowedIPs" hint="Các mạng thiết bị truy cập qua VPN, phân tách bằng dấu phẩy.">
                 <input className="input mono" value={s.clientRoutes} onChange={(e) => set("clientRoutes", e.target.value)} disabled={readOnly} required />
-                <button className="btn sm" type="button" disabled={readOnly || !vpnRoutes} onClick={() => setS({ ...s, clientRoutes: vpnRoutes, dns: "", peerIsolation: false })}>Chỉ mạng VPN · cho phép ping / remote</button>
-                <button className="btn sm" type="button" disabled={readOnly} onClick={() => setS({ ...s, clientRoutes: "0.0.0.0/0, ::/0", dns: s.dns || "1.1.1.1, 1.0.0.1" })}>Toàn bộ lưu lượng qua VPN</button>
-                <p className="small muted">Internet và DNS giữ theo mạng của thiết bị. Lưu cài đặt; với thiết bị cũ, vào Chỉnh sửa, xóa AllowedIPs và DNS để dùng mặc định mới, lưu rồi tải lại .conf.</p>
               </Field>
               <Field label="MTU" hint="Dùng 1420 cho mạng IPv4 có MTU 1500; 1412 cho PPPoE; 1400 hoặc thấp hơn cho IPv6 qua IPv6 hoặc khi tải xuống bị treo.">
                 <input className="input" type="number" min={1280} max={9000} value={s.mtu} onChange={(e) => set("mtu", Number(e.target.value))} disabled={readOnly} required />
@@ -111,7 +107,7 @@ export function SettingsPage() {
           </div>
         )}
       </form>
-      {!readOnly && <Updater />}
+      {!readOnly && <><PublicAccess onEndpointChanged={() => api.settings().then(setS)} /><Updater /></>}
     </>
   );
 }
