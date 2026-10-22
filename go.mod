@@ -1,13 +1,13 @@
 module github.com/lehuunghi/vpn
 
-go 1.27.1
+go 1.27.3
 
 require (
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	github.com/tailscale/wf v0.0.0-20240214030419-6fbb0a674ee6
 	github.com/vishvananda/netlink v1.3.1
 	golang.org/x/crypto v0.57.0
-	golang.org/x/net v0.58.0
+	golang.org/x/net v0.60.0
 	golang.org/x/sys v0.48.0
 	golang.org/x/term v0.46.0
 	golang.zx2c4.com/wireguard v0.0.0-20231211153847-12269c276173
