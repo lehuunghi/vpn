@@ -5,6 +5,8 @@ set -euo pipefail
 [[ $(uname -s) == Linux ]] && command -v systemctl >/dev/null || { echo 'Native installer requires Linux with systemd; use Docker on other hosts.' >&2; exit 1; }
 command -v nft >/dev/null || { echo 'Install nftables and wireguard-tools first; see docs/installation.md.' >&2; exit 1; }
 command -v python3 >/dev/null || { echo 'Install python3 first.' >&2; exit 1; }
+unit="$(dirname "$0")/vpn20.service"
+[[ -f "$unit" ]] || { echo 'Run install.sh from the repository, with vpn20.service beside it.' >&2; exit 1; }
 archive=''
 version=''
 while [[ $# -gt 0 ]]; do
@@ -68,8 +70,6 @@ fi
 install -m 0755 "$work/vpn20" /usr/local/bin/vpn20
 install -d /usr/share/doc/vpn20
 install -m 0644 "$work/LICENSE" "$work/NOTICE" /usr/share/doc/vpn20/
-unit="$(dirname "$0")/vpn20.service"
-[[ -f "$unit" ]] || { echo 'Run install.sh from the repository, with vpn20.service beside it.' >&2; exit 1; }
 install -m 0644 "$unit" /etc/systemd/system/vpn20.service
 systemctl daemon-reload
 systemctl enable --now vpn20.service

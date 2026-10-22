@@ -89,6 +89,10 @@ type dockerMount struct {
 	Type, Name, Source, Destination string
 	RW                              bool
 }
+type portBinding struct {
+	HostIP   string `json:"HostIp"`
+	HostPort string `json:"HostPort"`
+}
 type containerInfo struct {
 	ID          string `json:"Id"`
 	Name, Image string
@@ -100,6 +104,7 @@ type containerInfo struct {
 		Health  *struct{ Status string }
 	}
 	NetworkSettings struct {
+		Ports    map[string][]portBinding
 		Networks map[string]struct {
 			NetworkID  string
 			Aliases    []string
@@ -440,6 +445,48 @@ func replacementConfig(old containerInfo, image string) (map[string]json.RawMess
 	host := map[string]json.RawMessage{}
 	for k, v := range old.HostConfig {
 		host[k] = v
+	}
+	// Docker keeps an automatically allocated host port as "" or "0" in
+	// HostConfig. Reusing that request would assign another port at upgrade.
+	var ports map[string][]portBinding
+	if raw := host["PortBindings"]; len(raw) > 0 {
+		if err := json.Unmarshal(raw, &ports); err != nil {
+			return nil, nil, nil, err
+		}
+		changed := false
+		for name, bindings := range ports {
+			used := map[int]bool{}
+			for _, binding := range bindings {
+				if binding.HostPort == "" || binding.HostPort == "0" {
+					continue
+				}
+				for j, active := range old.NetworkSettings.Ports[name] {
+					if binding.HostPort == active.HostPort && (binding.HostIP == "" || binding.HostIP == active.HostIP) {
+						used[j] = true
+					}
+				}
+			}
+			for i, binding := range bindings {
+				if binding.HostPort != "" && binding.HostPort != "0" {
+					continue
+				}
+				resolved := false
+				for j, active := range old.NetworkSettings.Ports[name] {
+					if used[j] || (binding.HostIP != "" && binding.HostIP != active.HostIP) || active.HostPort == "" || active.HostPort == "0" {
+						continue
+					}
+					bindings[i].HostPort = active.HostPort
+					used[j], resolved, changed = true, true, true
+					break
+				}
+				if !resolved {
+					return nil, nil, nil, fmt.Errorf("cannot preserve allocated Docker host port for %s", name)
+				}
+			}
+		}
+		if changed {
+			host["PortBindings"] = mustJSON(ports)
+		}
 	}
 	// Keep declared mount options, bind propagation, tmpfs and volume subpaths.
 	// Add only anonymous volumes missing from HostConfig, using their existing

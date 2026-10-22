@@ -8,14 +8,12 @@ export function Updater() {
   const [error, setError] = useState("");
   const [working, setWorking] = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
-  const initialVersion = useRef("");
   const hadUpdate = useRef(false);
   const activeJob = useRef("");
   useEffect(() => {
     let live = true;
     const refresh = () => api.updateStatus().then((s) => {
       if (!live) return;
-      if (!initialVersion.current) initialVersion.current = s.current;
       if (s.busy) { hadUpdate.current = true; activeJob.current = s.job.id || ""; }
       if (hadUpdate.current && activeJob.current === s.job.id && !!s.job.version && !s.busy && s.job.phase === "complete") { window.location.reload(); return; }
       setStatus(s); setReconnecting(false);

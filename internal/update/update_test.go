@@ -172,3 +172,31 @@ func TestDatabaseSnapshotAndRestoreIncludesWAL(t *testing.T) {
 		t.Fatalf("restored snapshot: %q %v", v, err)
 	}
 }
+
+func TestApplyRejectsTamperedPayloadAndReleasesLock(t *testing.T) {
+	data := t.TempDir()
+	id := strings.Repeat("c", 24)
+	root := filepath.Join(data, "updates")
+	dir := filepath.Join(root, id)
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	payload := filepath.Join(dir, "payload")
+	if err := os.WriteFile(payload, []byte("tampered"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "active"), nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	plan := Plan{Job: Job{ID: id}, DataDir: data, Payload: payload, Method: "systemd", Digest: "sha256:" + strings.Repeat("0", 64)}
+	path := filepath.Join(dir, "plan.json")
+	if err := writeJSON(path, plan); err != nil {
+		t.Fatal(err)
+	}
+	if err := Apply(path); err == nil || !strings.Contains(err.Error(), "digest changed") {
+		t.Fatalf("did not reject tampering: %v", err)
+	}
+	if exists(filepath.Join(root, "active")) || readJob(root).Phase != "failed" {
+		t.Fatal("tampered payload left a permanent update lock or hid failure")
+	}
+}

@@ -111,6 +111,10 @@ func TestDockerDaemonUpdate(t *testing.T) {
 			if !healthy && current.ID != old.ID {
 				t.Fatal("did not restore previous container")
 			}
+			before, after := old.NetworkSettings.Ports["51821/tcp"], current.NetworkSettings.Ports["51821/tcp"]
+			if len(before) != 1 || len(after) != 1 || before[0] != after[0] {
+				t.Fatalf("changed reachable host port: before=%+v after=%+v", before, after)
+			}
 			s, err = store.Open(db)
 			if err != nil {
 				t.Fatal(err)

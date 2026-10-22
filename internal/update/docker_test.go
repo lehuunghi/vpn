@@ -52,6 +52,27 @@ func TestDockerReplacementPreservesVolumesPortsAndOptions(t *testing.T) {
 	}
 }
 
+func TestDockerReplacementPreservesAllocatedHostPorts(t *testing.T) {
+	old := testContainer()
+	old.HostConfig["PortBindings"] = mustJSON(map[string][]portBinding{"51821/tcp": {{HostIP: "127.0.0.1", HostPort: "0"}, {HostIP: "127.0.0.1", HostPort: "51821"}}})
+	old.NetworkSettings.Ports = map[string][]portBinding{"51821/tcp": {{HostIP: "127.0.0.1", HostPort: "51821"}, {HostIP: "127.0.0.1", HostPort: "32781"}}}
+	_, host, _, err := replacementConfig(old, Image+":latest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ports map[string][]portBinding
+	if err = json.Unmarshal(host["PortBindings"], &ports); err != nil {
+		t.Fatal(err)
+	}
+	if bindings := ports["51821/tcp"]; bindings[0].HostPort != "32781" || bindings[1].HostPort != "51821" {
+		t.Fatalf("changed assigned/fixed ports: %+v", bindings)
+	}
+	old.NetworkSettings.Ports = nil
+	if _, _, _, err = replacementConfig(old, Image+":latest"); err == nil {
+		t.Fatal("accepted unresolvable allocated port")
+	}
+}
+
 func TestDockerUpdateAndRollback(t *testing.T) {
 	for _, healthy := range []bool{true, false} {
 		t.Run(fmt.Sprint(healthy), func(t *testing.T) {

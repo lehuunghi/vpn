@@ -46,6 +46,11 @@ func newTestEngine(t *testing.T) (*Engine, *wg.Mock) {
 	if err := e.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
+	// These tests drive polls explicitly. Wait for the initial background poll
+	// to finish before creating peers, so it cannot establish a zero baseline
+	// between a test's CreatePeer and first Touch on a slower Windows runner.
+	e.cancel()
+	e.wg.Wait()
 	t.Cleanup(func() { _ = e.Stop(context.Background()) })
 	return e, mock
 }
