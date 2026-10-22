@@ -228,6 +228,10 @@ func (m *Manager) prepareDocker(ctx context.Context, j *Job, c *Candidate) error
 		return err
 	}
 	p := dockerPlan{Job: *j, DataDir: m.opts.DataDir, DBPath: m.opts.DBPath, Target: old.ID, Name: strings.TrimPrefix(old.Name, "/"), ImageID: img.ID, ImageRef: ref}
+	tempDir := filepath.Join(dir, "tmp")
+	if err = os.Mkdir(tempDir, 0700); err != nil {
+		return err
+	}
 	path := filepath.Join(dir, "docker-plan.json")
 	if err = writeJSON(path, p); err != nil {
 		return err
@@ -253,7 +257,7 @@ func (m *Manager) prepareDocker(ctx context.Context, j *Job, c *Candidate) error
 	j.Phase = "installing"
 	j.Message = "Đang sao lưu và thay container. Các cổng, volume, cấu hình mạng và thiết bị sẽ được giữ lại."
 	_ = writeJob(m.root, *j)
-	body := map[string]any{"Image": old.Image, "User": "0:0", "Entrypoint": []string{"/usr/local/bin/vpn20"}, "Cmd": []string{"docker-apply-update", path}, "Labels": map[string]string{"com.vpn20.update.target": old.ID}, "HostConfig": map[string]any{"AutoRemove": true, "NetworkMode": "none", "ReadonlyRootfs": true, "CapDrop": []string{"ALL"}, "SecurityOpt": []string{"no-new-privileges:true"}, "Mounts": []any{dataMount, socketMount}, "LogConfig": map[string]any{"Type": "json-file", "Config": map[string]string{"max-size": "5m", "max-file": "1"}}}}
+	body := map[string]any{"Image": old.Image, "User": "0:0", "Entrypoint": []string{"/usr/local/bin/vpn20"}, "Cmd": []string{"docker-apply-update", path}, "Env": []string{"TMPDIR=" + tempDir}, "Healthcheck": map[string]any{"Test": []string{"NONE"}}, "Labels": map[string]string{"com.vpn20.update.target": old.ID}, "HostConfig": map[string]any{"AutoRemove": true, "NetworkMode": "none", "ReadonlyRootfs": true, "CapDrop": []string{"ALL"}, "SecurityOpt": []string{"no-new-privileges:true"}, "Mounts": []any{dataMount, socketMount}, "LogConfig": map[string]any{"Type": "json-file", "Config": map[string]string{"max-size": "5m", "max-file": "1"}}}}
 	var created struct {
 		ID string `json:"Id"`
 	}

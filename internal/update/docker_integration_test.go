@@ -3,7 +3,14 @@
 package update
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
+	"io"
+	"net"
+	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -44,10 +51,12 @@ func TestDockerDaemonUpdate(t *testing.T) {
 				t.Fatal(err)
 			}
 			name := "vpn20-update-integration-" + id
+			ref := Image + "@" + img.ID
+			socket := registryAliasProxy(t, ref, image)
 			var created struct {
 				ID string `json:"Id"`
 			}
-			body := map[string]any{"Image": oldImage, "Env": []string{"VPN20_BACKEND=mock", "VPN20_MANAGE_FIREWALL=false", "VPN20_MANAGE_SYSCTL=false", "VPN20_HTTP_LISTEN=0.0.0.0:51821"}, "Labels": map[string]string{"com.vpn20.integration": id}, "HostConfig": map[string]any{"Binds": []string{data + ":/data"}, "RestartPolicy": map[string]string{"Name": "unless-stopped"}, "PortBindings": map[string]any{"51821/tcp": []any{map[string]string{"HostIp": "127.0.0.1", "HostPort": "0"}}}}}
+			body := map[string]any{"Image": oldImage, "Env": []string{"VPN20_BACKEND=mock", "VPN20_MANAGE_FIREWALL=false", "VPN20_MANAGE_SYSCTL=false", "VPN20_HTTP_LISTEN=0.0.0.0:51821", "VPN20_DATA_DIR=" + data}, "Labels": map[string]string{"com.vpn20.integration": id}, "HostConfig": map[string]any{"Binds": []string{data + ":" + data, socket + ":" + socket}, "RestartPolicy": map[string]string{"Name": "unless-stopped"}, "PortBindings": map[string]any{"51821/tcp": []any{map[string]string{"HostIp": "127.0.0.1", "HostPort": "0"}}}}}
 			if err := d.call(ctx, "POST", "/containers/create?name="+name, body, &created); err != nil {
 				t.Fatal(err)
 			}
@@ -86,14 +95,25 @@ func TestDockerDaemonUpdate(t *testing.T) {
 			_ = s.SetSetting(ctx, "update-marker", "retained")
 			_ = s.Close()
 			root := filepath.Join(data, "updates")
-			if err = os.MkdirAll(filepath.Join(root, id), 0700); err != nil {
+			if err = os.MkdirAll(root, 0700); err != nil {
 				t.Fatal(err)
 			}
-			plan := dockerPlan{Job: Job{ID: id, Version: "integration"}, DataDir: data, DBPath: db, Target: old.ID, Name: name, ImageID: img.ID, ImageRef: image}
-			if err = applyContainer(ctx, d, plan); err != nil {
+			m := New(Options{Mode: "docker", DataDir: data, DBPath: db, DockerSocket: socket, DockerContainer: name})
+			if err = os.WriteFile(filepath.Join(root, "active"), nil, 0600); err != nil {
 				t.Fatal(err)
 			}
-			job := readJob(root)
+			job := Job{ID: id, Version: "integration"}
+			if err = m.prepareDocker(ctx, &job, &Candidate{ImageDigest: img.ID}); !errors.Is(err, errHandedOff) {
+				t.Fatal(err)
+			}
+			for exists(filepath.Join(root, "active")) {
+				select {
+				case <-ctx.Done():
+					t.Fatalf("detached helper did not complete: %+v", readJob(root))
+				case <-time.After(200 * time.Millisecond):
+				}
+			}
+			job = readJob(root)
 			want := "complete"
 			if !healthy {
 				want = "rolled_back"
@@ -124,7 +144,59 @@ func TestDockerDaemonUpdate(t *testing.T) {
 			if err != nil || marker != "retained" {
 				t.Fatalf("lost database contents: %q %v", marker, err)
 			}
-			t.Log("PASS: real Docker image replacement, private data preservation and health/rollback", healthy)
+			t.Log("PASS: real detached Docker helper, image replacement, retained data/host port and health/rollback", healthy)
 		})
 	}
+}
+
+// Only registry resolution is simulated: local fixture images are addressed
+// through a synthetic GHCR digest. All container operations, the isolated
+// helper process and SQLite snapshot/rollback use the actual Docker daemon.
+func registryAliasProxy(t *testing.T, ref, localImage string) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "vpn20-update-socket-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	socket := filepath.Join(dir, "docker.sock")
+	listener, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target, _ := url.Parse("http://docker")
+	proxy := httputil.NewSingleHostReverseProxy(target)
+	proxy.Transport = &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+		return (&net.Dialer{}).DialContext(ctx, "unix", "/var/run/docker.sock")
+	}}
+	server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" && r.URL.Path == "/images/create" && r.URL.Query().Get("fromImage") == ref {
+			_, _ = io.WriteString(w, "{\"status\":\"local integration image present\"}\n")
+			return
+		}
+		if r.URL.Path == "/images/"+ref+"/json" {
+			r.URL.Path = "/images/" + localImage + "/json"
+			r.URL.RawPath = ""
+		}
+		if r.Method == "POST" && r.URL.Path == "/containers/create" {
+			var body map[string]json.RawMessage
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				http.Error(w, err.Error(), 400)
+				return
+			}
+			_ = r.Body.Close()
+			var image string
+			_ = json.Unmarshal(body["Image"], &image)
+			if image == ref {
+				body["Image"] = mustJSON(localImage)
+			}
+			b, _ := json.Marshal(body)
+			r.Body = io.NopCloser(bytes.NewReader(b))
+			r.ContentLength = int64(len(b))
+		}
+		proxy.ServeHTTP(w, r)
+	})}
+	t.Cleanup(func() { _ = server.Close() })
+	go func() { _ = server.Serve(listener) }()
+	return socket
 }
