@@ -28,6 +28,17 @@ import (
 )
 
 func main() {
+	if err := platformInit(); err != nil {
+		fmt.Fprintln(os.Stderr, "vpn20:", err)
+		os.Exit(1)
+	}
+	if handled, err := platformCommand(os.Args[1:]); handled {
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "vpn20:", err)
+			os.Exit(1)
+		}
+		return
+	}
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
 		case "version", "--version", "-v":
@@ -96,6 +107,12 @@ func openBackend(cfg *config.Config, log *slog.Logger) (wg.Backend, error) {
 }
 
 func run() error {
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	return runContext(ctx)
+}
+
+func runContext(ctx context.Context) error {
 	cfg, err := config.FromEnv()
 	if err != nil {
 		return err
@@ -114,13 +131,17 @@ func run() error {
 		return err
 	}
 	eng := engine.New(cfg, st, be, log)
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-
 	if err := eng.Start(ctx); err != nil {
 		_ = eng.Stop(context.Background())
 		return err
 	}
+	defer func() {
+		shutdown, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+		defer cancel()
+		if err := eng.Stop(shutdown); err != nil {
+			log.Warn("shutdown", "error", err)
+		}
+	}()
 	srv := server.New(cfg, eng, log)
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- srv.ListenAndServe(ctx) }()
@@ -131,13 +152,8 @@ func run() error {
 	case err := <-serveErr:
 		if err != nil {
 			log.Error("admin server failed", "error", err)
+			return err
 		}
-	}
-	stop()
-	shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if err := eng.Stop(shutdown); err != nil {
-		log.Warn("shutdown", "error", err)
 	}
 	return nil
 }
@@ -167,7 +183,7 @@ func resetPassword(args []string) error {
 		pw = v
 	} else {
 		fmt.Fprint(os.Stderr, "New password: ")
-		b, err := term.ReadPassword(int(syscall.Stdin))
+		b, err := term.ReadPassword(int(os.Stdin.Fd()))
 		fmt.Fprintln(os.Stderr)
 		if err != nil {
 			return err

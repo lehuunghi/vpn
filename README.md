@@ -18,6 +18,13 @@ Khởi động máy chủ, mở giao diện quản trị, tạo thiết bị và
 VPN trên mô-đun WireGuard của nhân Linux, quản lý NAT và chuyển tiếp IP, đồng
 thời hiển thị thiết bị đang kết nối, tốc độ và lưu lượng sử dụng.
 
+## Cài trực tiếp trên Windows
+
+Tải bộ cài Windows x64 tại **[Releases](https://github.com/lehuunghi/vpn/releases)**.
+Bộ cài kèm WireGuardNT và dịch vụ **VPN20** tự chạy khi bật máy, không cần
+Docker/WSL. Mở <http://127.0.0.1:51821> để thiết lập. Xem **[hướng dẫn Windows](docs/windows.md)**
+về yêu cầu WinNAT, cài đặt, nâng cấp và các khác biệt IPv6/TCP MSS so với Linux.
+
 ## Container tự động trên GHCR
 
 Workflow tự build khi cập nhật `main` hoặc tạo tag `v*`, rồi đẩy image

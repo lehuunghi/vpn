@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/netip"
+	"runtime"
 	"sync"
 	"time"
 
@@ -133,6 +134,9 @@ func (e *Engine) Start(ctx context.Context) error {
 	}
 	e.log.Info("interface up", "iface", e.cfg.Iface, "backend", e.be.Kind(), "port", e.cfg.ListenPort, "addresses", e.ServerAddresses(), "mtu", settings.MTU)
 	if err := e.applyFirewall(ctx); err != nil {
+		if runtime.GOOS == "windows" {
+			return fmt.Errorf("configure Windows NAT/firewall: %w", err)
+		}
 		// Not fatal: the operator may run their own NAT. It is reported in
 		// the UI and the log so nobody wonders why peers cannot reach out.
 		e.log.Error("firewall rules not applied", "error", err)
@@ -165,13 +169,21 @@ func (e *Engine) Stop(ctx context.Context) error {
 	if err := e.col.flush(ctx); err != nil {
 		errs = append(errs, err)
 	}
+	// Stop the Windows data plane before releasing its dynamic isolation filters.
+	if runtime.GOOS == "windows" {
+		if err := e.be.Down(ctx); err != nil {
+			errs = append(errs, err)
+		}
+	}
 	if e.cfg.ManageFirewall && e.be.Kind() != "mock" {
 		if err := netcfg.Remove(ctx, ""); err != nil {
 			errs = append(errs, err)
 		}
 	}
-	if err := e.be.Down(ctx); err != nil {
-		errs = append(errs, err)
+	if runtime.GOOS != "windows" {
+		if err := e.be.Down(ctx); err != nil {
+			errs = append(errs, err)
+		}
 	}
 	return errors.Join(errs...)
 }

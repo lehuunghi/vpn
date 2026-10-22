@@ -10,10 +10,12 @@ export function SettingsPage() {
   const [s, setS] = useState<Settings | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [platform, setPlatform] = useState("");
   const readOnly = me?.role !== "admin";
 
   useEffect(() => {
     api.settings().then(setS).catch((e) => setError(errorMessage(e)));
+    api.status().then((status) => setPlatform(status.platform)).catch((e) => setError(errorMessage(e)));
   }, [settingsVersion]);
 
   async function submit(e: FormEvent) {
@@ -44,6 +46,7 @@ export function SettingsPage() {
       </div>
       <form onSubmit={submit} className="stack">
         {error && <div className="error">{error}</div>}
+        {platform === "windows" && <div className="notice">Máy chủ Windows hỗ trợ NAT IPv4 và định tuyến IPv6. IPv6 ra Internet cần dải địa chỉ và tuyến trả về từ bộ định tuyến. Đặt MTU phù hợp vì Windows không có chức năng điều chỉnh TCP MSS của Linux.</div>}
         {readOnly && <div className="notice">Bạn có vai trò chỉ xem nên không thể chỉnh sửa cài đặt.</div>}
         <div className="card">
           <div className="card-head">
@@ -88,7 +91,7 @@ export function SettingsPage() {
           </div>
           <div className="card-body">
             <Check label="Cô lập thiết bị" hint="Chặn lưu lượng giữa các thiết bị. Mỗi thiết bị có thể truy cập máy chủ và Internet, nhưng không truy cập thiết bị khác." checked={s.peerIsolation} onChange={(v) => set("peerIsolation", v)} disabled={readOnly} />
-            <Check label="Điều chỉnh TCP MSS" hint="Điều chỉnh MSS của kết nối được chuyển tiếp cho phù hợp với MTU của VPN. Nên bật để tránh tình trạng đã kết nối nhưng trang web bị treo." checked={s.clampMSS} onChange={(v) => set("clampMSS", v)} disabled={readOnly} />
+            <Check label="Điều chỉnh TCP MSS" hint={platform === "windows" ? "Chức năng này chỉ có trên Linux. Trên Windows, hãy chỉnh MTU ở trên." : "Điều chỉnh MSS của kết nối được chuyển tiếp cho phù hợp với MTU của VPN. Nên bật để tránh tình trạng đã kết nối nhưng trang web bị treo."} checked={s.clampMSS} onChange={(v) => set("clampMSS", v)} disabled={readOnly || platform === "windows"} />
             <Field label="Thời gian ghi nhận kết nối (giây)" hint="Thiết bị được xem là đang kết nối trong khoảng thời gian này kể từ lần bắt tay cuối. WireGuard từ chối phiên sau 180 giây.">
               <input className="input" type="number" min={30} max={3600} value={s.connectedWindow} onChange={(e) => set("connectedWindow", Number(e.target.value))} disabled={readOnly} required style={{ maxWidth: 160 }} />
             </Field>

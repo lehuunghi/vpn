@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"net/netip"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -16,10 +18,10 @@ import (
 
 // Config is the process configuration.
 type Config struct {
-	DataDir  string
-	DBPath   string
-	Backend  string // auto | kernel | userspace | mock
-	Iface    string
+	DataDir string
+	DBPath  string
+	Backend string // auto | kernel | userspace | mock
+	Iface   string
 	// Listen is the UDP port WireGuard listens on.
 	ListenPort int
 	// Subnet4 / Subnet6 are the tunnel networks. The server takes the first
@@ -108,8 +110,13 @@ func envDuration(key string, def time.Duration) (time.Duration, error) {
 func FromEnv() (*Config, error) {
 	var errs []error
 	c := &Config{}
-	c.DataDir = env("VPN20_DATA_DIR", "/data")
-	c.DBPath = env("VPN20_DB", c.DataDir+"/vpn20.db")
+	dataDefault, httpDefault := "/data", ":51821"
+	if runtime.GOOS == "windows" {
+		dataDefault = filepath.Join(env("ProgramData", `C:\ProgramData`), "VPN20")
+		httpDefault = "127.0.0.1:51821"
+	}
+	c.DataDir = env("VPN20_DATA_DIR", dataDefault)
+	c.DBPath = env("VPN20_DB", filepath.Join(c.DataDir, "vpn20.db"))
 	c.Backend = strings.ToLower(env("VPN20_BACKEND", "auto"))
 	switch c.Backend {
 	case "auto", "kernel", "userspace", "mock":
@@ -137,7 +144,7 @@ func FromEnv() (*Config, error) {
 		}
 	}
 	c.Egress = env("VPN20_EGRESS_INTERFACE", "")
-	c.HTTP = env("VPN20_HTTP_LISTEN", ":51821")
+	c.HTTP = env("VPN20_HTTP_LISTEN", httpDefault)
 	c.TLSCert = env("VPN20_TLS_CERT", "")
 	c.TLSKey = env("VPN20_TLS_KEY", "")
 	if (c.TLSCert == "") != (c.TLSKey == "") {

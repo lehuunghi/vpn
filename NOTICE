@@ -38,3 +38,7 @@ wireguard-go). They are separate programs invoked by vpn20, not linked into it.
 
 WireGuard is a registered trademark of Jason A. Donenfeld. vpn20 is not
 affiliated with or endorsed by the WireGuard project.
+Windows support also uses the official WireGuardNT binary distribution
+(license included in Windows packages), WireGuard for Windows Go packages
+(MIT), and github.com/tailscale/wf (BSD-3-Clause). These projects retain their
+respective copyrights. See the bundled licenses and Go module metadata.
