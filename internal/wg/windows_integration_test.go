@@ -418,5 +418,14 @@ func udpPacket(src, dst string, sport, dport uint16, payload []byte) []byte {
 	binary.BigEndian.PutUint16(p[22:], dport)
 	binary.BigEndian.PutUint16(p[24:], uint16(8+len(payload)))
 	copy(p[28:], payload)
+	// Match ordinary WireGuard clients, which supply a transport checksum even
+	// for IPv4. This also exercises native receive checksum/offload validation.
+	pseudo := append([]byte(nil), p[12:20]...)
+	pseudo = append(pseudo, 0, 17, byte((8+len(payload))>>8), byte(8+len(payload)))
+	cs := checksum(append(pseudo, p[20:]...))
+	if cs == 0 {
+		cs = 0xffff
+	}
+	binary.BigEndian.PutUint16(p[26:], cs)
 	return p
 }

@@ -205,6 +205,12 @@ quyền ghi, chép `config.example.json` vào đường dẫn cấu hình mặc 
   Windows dành riêng; chọn `VPN20_HTTP_LISTEN` khác trong JSON rồi chạy lại
   bộ cài. Khi đổi cổng, mở trình duyệt bằng địa chỉ mới; shortcut vẫn trỏ
   đến cổng mặc định 51821.
+- Lỗi mở UDP do cổng đang dùng hoặc Windows dành riêng: VPN20 chờ thử lại
+  trong 10 giây rồi báo cổng cụ thể. Kiểm tra `netsh interface ipv4 show
+  excludedportrange protocol=udp` và IPv6 tương ứng; chọn `VPN20_PORT` khác
+  trong JSON, cập nhật cổng công khai của client và UDP forwarding trên router.
+  Không xóa dải cổng hoặc NAT thuộc Hyper-V/HNS/Docker. Bộ cài chờ tối đa
+  2 phút để driver/mạng hoàn tất trên máy cài lần đầu.
 - Đã bắt tay nhưng không ping/remote: kiểm tra AllowedIPs, cô lập thiết bị và
   firewall của máy đích; chạy helper trên máy đích. RDP cần phiên bản Windows
   hỗ trợ nhận kết nối, dịch vụ TermService và tài khoản có quyền/mật khẩu.

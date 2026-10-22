@@ -7,6 +7,24 @@ if ($Architecture -eq 'x86' -and ${env:ProgramFiles(x86)}) { $app = Join-Path ${
 $data = Join-Path $env:ProgramData 'VPN20'
 $installed = $false
 try {
+    # Hyper-V/HNS can reserve the default UDP port on a hosted runner. Exercise
+    # the supported custom-port configuration in that case, without deleting
+    # exclusions or changing another application's network configuration.
+    if (!(Test-Path "$data\config.json")) {
+        $probe = [Net.Sockets.UdpClient]::new([Net.Sockets.AddressFamily]::InterNetwork)
+        try { $probe.Client.Bind([Net.IPEndPoint]::new([Net.IPAddress]::Any, 51820)) }
+        catch {
+            $failure = $_.Exception
+            while ($failure.InnerException) { $failure = $failure.InnerException }
+            if ($failure -isnot [Net.Sockets.SocketException] -or $failure.NativeErrorCode -notin @(10013,10048)) { throw }
+            $probe.Dispose()
+            $probe = [Net.Sockets.UdpClient]::new([Net.IPEndPoint]::new([Net.IPAddress]::Any, 0))
+            $port = [string]$probe.Client.LocalEndPoint.Port
+            $null = New-Item -ItemType Directory -Force $data
+            [IO.File]::WriteAllText("$data\config.json", (@{VPN20_PORT=$port} | ConvertTo-Json), [Text.UTF8Encoding]::new($false))
+            Write-Output "Default UDP port is unavailable on this runner; testing configured VPN20_PORT=$port"
+        } finally { $probe.Dispose() }
+    }
     $p = Start-Process -FilePath $Installer -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-' -Wait -PassThru
     if ($p.ExitCode -ne 0) { throw "Installer exited $($p.ExitCode)" }
     $installed = $true

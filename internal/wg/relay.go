@@ -59,12 +59,27 @@ func (b *relayBackend) Up(ctx context.Context, cfg DeviceConfig, addrs []netip.P
 	}
 	d := device.NewDevice(router, newRelayBind(), logger)
 	text := fmt.Sprintf("private_key=%x\nlisten_port=%d\nreplace_peers=true\n", cfg.PrivateKey[:], cfg.ListenPort)
-	if err = d.IpcSet(text); err == nil {
-		err = d.Up()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		err = d.IpcSet(text)
+		if err == nil {
+			err = d.Up()
+		}
+		if err == nil || !retryRelayBind(err) || time.Now().After(deadline) {
+			break
+		}
+		timer := time.NewTimer(250 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			d.Close()
+			return ctx.Err()
+		case <-timer.C:
+		}
 	}
 	if err != nil {
 		d.Close()
-		return fmt.Errorf("start WireGuard relay: %w", err)
+		return fmt.Errorf("start WireGuard relay on UDP %d: %w%s", cfg.ListenPort, err, relayBindHint(err))
 	}
 	b.router, b.device, b.key = router, d, cfg.PrivateKey
 	return nil

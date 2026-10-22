@@ -3,6 +3,7 @@
 package wg
 
 import (
+	"errors"
 	"fmt"
 	"net/netip"
 	"os"
@@ -16,6 +17,16 @@ import (
 )
 
 func newRelayBind() conn.Bind { return conn.NewDefaultBind() }
+
+func retryRelayBind(err error) bool {
+	return errors.Is(err, windows.WSAEACCES) || errors.Is(err, windows.WSAEADDRINUSE)
+}
+func relayBindHint(err error) string {
+	if retryRelayBind(err) {
+		return "; Windows refused the UDP port for 10 seconds; check other listeners/excluded UDP ports, or change VPN20_PORT in config.json and update the client endpoint/router port"
+	}
+	return ""
+}
 
 func attachRelayHost(r *relay.Router, name string, addrs []netip.Prefix, mtu int) error {
 	exe, err := os.Executable()

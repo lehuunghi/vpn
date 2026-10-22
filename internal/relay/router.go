@@ -130,7 +130,6 @@ func New(name string, addrs []netip.Prefix, mtu int) (*Router, error) {
 	r.stack.SetTransportProtocolHandler(udp.ProtocolNumber, r.forwardUDP)
 	r.workers.Add(1)
 	go func() { defer r.workers.Done(); r.pump() }()
-	r.events <- tun.EventUp
 	ok = true
 	return r, nil
 }

@@ -15,4 +15,7 @@ type relayBind struct{ conn.Bind }
 
 func newRelayBind() conn.Bind { return &relayBind{conn.NewDefaultBind()} }
 
+func retryRelayBind(err error) bool  { return false }
+func relayBindHint(err error) string { return "" }
+
 func attachRelayHost(r *relay.Router, name string, addrs []netip.Prefix, mtu int) error { return nil }
