@@ -158,18 +158,26 @@ func TestRelayEncryptedTraffic(t *testing.T) {
 		t.Run("server ping "+ip.String(), func(t *testing.T) { relayPing(t, clients[0], ip) })
 	}
 	var host netip.Addr
+	vpnSubnet := netip.MustParsePrefix("10.254.249.0/24")
 	if c, err := net.Dial("udp4", "192.0.2.1:9"); err == nil {
 		host = c.LocalAddr().(*net.UDPAddr).AddrPort().Addr().Unmap()
 		_ = c.Close()
 	}
+	if !host.IsGlobalUnicast() || vpnSubnet.Contains(host) {
+		host = netip.Addr{}
+	}
 	addrs, _ := net.InterfaceAddrs()
 	for _, address := range addrs {
+		if host.IsValid() {
+			break
+		}
 		p, err := netip.ParsePrefix(address.String())
-		if err == nil && p.Addr().Is4() && p.Addr().IsGlobalUnicast() {
+		if err == nil && p.Addr().Is4() && p.Addr().IsGlobalUnicast() && !vpnSubnet.Contains(p.Addr()) {
 			host = p.Addr()
 			break
 		}
 	}
+	t.Logf("physical host IPv4 for egress checks: %s", host)
 	t.Run("host TCP source and half close", func(t *testing.T) {
 		if !host.IsValid() {
 			t.Skip("no host network adapter in this environment; required on Windows CI")
