@@ -51,15 +51,9 @@ func (m *Manager) api(ctx context.Context, method, path string, body, out any) e
 	var envelope struct {
 		Success bool            `json:"success"`
 		Result  json.RawMessage `json:"result"`
-		Info    struct {
-			TotalCount int `json:"total_count"`
-		} `json:"result_info"`
 	}
 	if err = json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&envelope); err != nil || !envelope.Success {
 		return errors.New("Cloudflare không xác nhận yêu cầu DNS; kiểm tra quyền của API token")
-	}
-	if envelope.Info.TotalCount > 100 {
-		return errors.New("Tên đã có quá nhiều bản ghi DNS; chọn subdomain khác")
 	}
 	if out != nil {
 		if err = json.Unmarshal(envelope.Result, out); err != nil {
@@ -71,8 +65,16 @@ func (m *Manager) api(ctx context.Context, method, path string, body, out any) e
 
 func (m *Manager) records(ctx context.Context) ([]record, error) {
 	var records []record
-	query := url.Values{"name": {m.state.Subdomain + "." + m.state.Domain}, "per_page": {"100"}}
+	name := m.state.Subdomain + "." + m.state.Domain
+	query := url.Values{"name.exact": {name}, "per_page": {"100"}}
 	err := m.api(ctx, http.MethodGet, "/zones/"+m.opt.ZoneID+"/dns_records?"+query.Encode(), nil, &records)
+	if err == nil {
+		for _, record := range records {
+			if record.Name != name {
+				return nil, errors.New("Cloudflare trả về bản ghi khác tên đã chọn; dừng đồng bộ để bảo vệ DNS")
+			}
+		}
+	}
 	return records, err
 }
 

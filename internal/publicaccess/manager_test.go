@@ -56,7 +56,7 @@ func newFixture(t *testing.T) (*Manager, *fixture) {
 		var result any
 		switch r.Method {
 		case http.MethodGet:
-			if r.URL.Query().Get("name") != "office.example.com" || r.URL.Query().Get("per_page") != "100" {
+			if r.URL.Query().Get("name.exact") != "office.example.com" || r.URL.Query().Get("per_page") != "100" {
 				t.Errorf("unbounded or incorrect record lookup: %s", r.URL.RawQuery)
 			}
 			result = f.records
@@ -84,7 +84,9 @@ func newFixture(t *testing.T) (*Manager, *fixture) {
 		default:
 			t.Errorf("unexpected method %s", r.Method)
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"success": true, "result": result})
+		// Cloudflare documents total_count as the unfiltered zone total. A
+		// large zone must not reject a correctly filtered single-host result.
+		_ = json.NewEncoder(w).Encode(map[string]any{"success": true, "result": result, "result_info": map[string]int{"total_count": 2000}})
 	}))
 	t.Cleanup(srv.Close)
 	m := New(Options{Domain: "example.com", ZoneID: strings.Repeat("a", 32), Token: "secret-token-test"}, st)
@@ -228,5 +230,20 @@ func TestDNSRefusesChangedDomain(t *testing.T) {
 	}
 	if err := restarted.Sync(context.Background()); err == nil {
 		t.Fatal("sync permitted with changed domain")
+	}
+}
+
+func TestDNSRejectsIgnoredNameFilter(t *testing.T) {
+	m, f := newFixture(t)
+	f.mu.Lock()
+	f.records = []record{{ID: strings.Repeat("c", 32), Name: "another.example.com", Type: "A", Content: "8.8.8.8"}}
+	f.mu.Unlock()
+	if _, err := m.Save(context.Background(), Input{Subdomain: "office", AutoIPv4: true}); err == nil {
+		t.Fatal("DNS provider returned a different name without an error")
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.creates+f.updates+f.deletes != 0 {
+		t.Fatal("DNS mutated after an incorrect lookup")
 	}
 }
