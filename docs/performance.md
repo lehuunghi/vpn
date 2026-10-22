@@ -4,11 +4,10 @@ vpn20 is built so the packet path is as short as it can be. This page explains
 what it does on its own, what only the host can do, and how to check the
 result.
 
-LAN administration and Cloudflare DDNS do not add work to the VPN packet path.
-DDNS uses bounded HTTPS requests every five minutes. The Windows admin TCP
-firewall rule follows the configured listener port and allows LocalSubnet;
+LAN administration does not add work to the VPN packet path. The Windows
+admin TCP firewall rule follows the configured listener port and allows LocalSubnet;
 relay/native forwarding and peer isolation are unchanged. See
-[LAN and public access](public-access.md) for deployment details.
+[LAN access](lan-access.md) for deployment details.
 
 ## What decides throughput
 

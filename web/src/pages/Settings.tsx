@@ -3,7 +3,6 @@ import { api, type Settings } from "../api";
 import { errorMessage, useAuth, useLive, useToast } from "../state";
 import { Check, Field } from "../components/ui";
 import { Updater } from "../components/Updater";
-import { PublicAccess } from "../components/PublicAccess";
 
 export function SettingsPage() {
   const { me } = useAuth();
@@ -56,7 +55,7 @@ export function SettingsPage() {
           </div>
           <div className="card-body">
             <div className="form-cols">
-              <Field label="Tên miền hoặc IP công khai" hint="Tên miền hoặc địa chỉ IP mà thiết bị kết nối đến.">
+              <Field label="Địa chỉ máy chủ" hint="Địa chỉ máy chủ mà thiết bị kết nối đến.">
                 <input className="input" value={s.endpointHost} onChange={(e) => set("endpointHost", e.target.value)} disabled={readOnly} required />
               </Field>
               <Field label="Cổng công khai" hint="Cổng thiết bị kết nối đến. Thường là cổng lắng nghe; đổi giá trị nếu cổng UDP của container được ánh xạ lại.">
@@ -107,7 +106,7 @@ export function SettingsPage() {
           </div>
         )}
       </form>
-      {!readOnly && <><PublicAccess onEndpointChanged={() => api.settings().then(setS)} /><Updater /></>}
+      {!readOnly && <Updater />}
     </>
   );
 }
