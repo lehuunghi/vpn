@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"runtime"
 	"time"
 
 	"github.com/lehuunghi/vpn/internal/netcfg"
@@ -19,21 +20,22 @@ type SysctlStatus struct {
 
 // Status is the server overview.
 type Status struct {
-	Version       string         `json:"version"`
-	Backend       string         `json:"backend"`
-	Interface     string         `json:"interface"`
-	PublicKey     string         `json:"publicKey"`
-	ListenPort    int            `json:"listenPort"`
-	Addresses     []string       `json:"addresses"`
-	Subnet4       string         `json:"subnet4"`
-	Subnet6       string         `json:"subnet6,omitempty"`
-	Egress        string         `json:"egress,omitempty"`
-	FirewallError string         `json:"firewallError,omitempty"`
-	FirewallManaged bool         `json:"firewallManaged"`
-	StartedAt     time.Time      `json:"startedAt"`
-	Sysctls       []SysctlStatus `json:"sysctls"`
-	Totals        Totals         `json:"totals"`
-	Settings      Settings       `json:"settings"`
+	Platform        string         `json:"platform"`
+	Version         string         `json:"version"`
+	Backend         string         `json:"backend"`
+	Interface       string         `json:"interface"`
+	PublicKey       string         `json:"publicKey"`
+	ListenPort      int            `json:"listenPort"`
+	Addresses       []string       `json:"addresses"`
+	Subnet4         string         `json:"subnet4"`
+	Subnet6         string         `json:"subnet6,omitempty"`
+	Egress          string         `json:"egress,omitempty"`
+	FirewallError   string         `json:"firewallError,omitempty"`
+	FirewallManaged bool           `json:"firewallManaged"`
+	StartedAt       time.Time      `json:"startedAt"`
+	Sysctls         []SysctlStatus `json:"sysctls"`
+	Totals          Totals         `json:"totals"`
+	Settings        Settings       `json:"settings"`
 }
 
 // Version is stamped at build time.
@@ -44,6 +46,7 @@ func (e *Engine) Status() Status {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	st := Status{
+		Platform:        runtime.GOOS,
 		Version:         Version,
 		Backend:         e.be.Kind(),
 		Interface:       e.cfg.Iface,

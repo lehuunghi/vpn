@@ -142,8 +142,9 @@ export interface SysctlStatus {
 }
 
 export interface Status {
+	platform: string;
   version: string;
-  backend: "kernel" | "userspace" | "mock";
+  backend: "kernel" | "userspace" | "wireguardnt" | "mock";
   interface: string;
   publicKey: string;
   listenPort: number;
