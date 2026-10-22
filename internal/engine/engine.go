@@ -34,6 +34,7 @@ type Engine struct {
 	log *slog.Logger
 
 	mu             sync.RWMutex
+	settingsMu     sync.Mutex
 	settings       Settings
 	serverKey      wg.Key
 	startedAt      time.Time
@@ -317,6 +318,24 @@ func (e *Engine) applyFirewall(ctx context.Context) error {
 
 // UpdateSettings validates, persists and applies new settings.
 func (e *Engine) UpdateSettings(ctx context.Context, s Settings) error {
+	e.settingsMu.Lock()
+	defer e.settingsMu.Unlock()
+	return e.updateSettings(ctx, s)
+}
+
+// SetEndpointHost changes only the hostname, preserving concurrent settings.
+func (e *Engine) SetEndpointHost(ctx context.Context, hostname string) error {
+	e.settingsMu.Lock()
+	defer e.settingsMu.Unlock()
+	s := e.Settings()
+	if s.EndpointHost == hostname {
+		return nil
+	}
+	s.EndpointHost = hostname
+	return e.updateSettings(ctx, s)
+}
+
+func (e *Engine) updateSettings(ctx context.Context, s Settings) error {
 	if err := s.Validate(); err != nil {
 		return err
 	}

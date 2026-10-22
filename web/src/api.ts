@@ -215,9 +215,27 @@ export interface UpdateStatus {
   job: { id?: string; phase: string; version?: string; message?: string; updatedAt?: string };
 }
 
+export interface SubdomainStatus {
+  name: string;
+  hostname?: string;
+  url?: string;
+  busy: boolean;
+  phase: string;
+  message?: string;
+  sslReady: boolean;
+  testCertificate?: boolean;
+  expiresAt?: string;
+  lastUpdate?: string;
+  ipv4?: string;
+  ipv6?: string;
+  reachability: "not_checked";
+}
+
 // --- endpoints --------------------------------------------------------------
 
 export const api = {
+  subdomain: () => get<SubdomainStatus>("/api/subdomain"),
+  updateSubdomain: (name: string) => post<SubdomainStatus>("/api/subdomain", { name }),
   updateStatus: () => get<UpdateStatus>("/api/update"),
   checkUpdate: () => post<UpdateStatus>("/api/update/check"),
   startUpdate: () => post<UpdateStatus["job"]>("/api/update"),

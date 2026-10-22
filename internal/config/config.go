@@ -41,6 +41,8 @@ type Config struct {
 	TLSSelfSigned   bool
 	// SecureCookies forces the Secure flag on when TLS terminates elsewhere.
 	SecureCookies bool
+	// DDNS infrastructure is configured by the installer, never by UI credentials.
+	DDNSAPI, DDNSHTTPS, DDNSACMECA string
 	// TrustedProxies are CIDRs whose X-Forwarded-For / X-Real-IP is believed.
 	TrustedProxies []netip.Prefix
 	// MetricsToken protects /metrics; empty disables the endpoint.
@@ -215,6 +217,9 @@ func FromEnv() (*Config, error) {
 		errs = append(errs, err)
 	}
 	c.InitialEndpoint = env("VPN20_ENDPOINT", "")
+	c.DDNSAPI = env("VPN20_DDNS_API", "https://ddns.20.com.vn")
+	c.DDNSHTTPS = env("VPN20_DDNS_HTTPS", ":443")
+	c.DDNSACMECA = env("VPN20_DDNS_ACME_CA", "")
 	c.InitialDNS = env("VPN20_DNS", "1.1.1.1, 1.0.0.1")
 	if c.ManageFirewall, err = envBool("VPN20_MANAGE_FIREWALL", true); err != nil {
 		errs = append(errs, err)

@@ -18,6 +18,14 @@ cache and in web/node_modules and is not repeated here.
 | github.com/vishvananda/netlink, netns | Apache-2.0 |
 | modernc.org/sqlite, libc, mathutil, memory | BSD-3-Clause |
 | github.com/skip2/go-qrcode | MIT, Tom Harwood |
+| github.com/caddyserver/certmagic | Apache-2.0 |
+| github.com/caddyserver/zerossl | MIT |
+| github.com/mholt/acmez/v3 | Apache-2.0 |
+| github.com/libdns/libdns | MIT |
+| github.com/miekg/dns | BSD-3-Clause |
+| go.uber.org/zap, zap/exp, multierr | MIT |
+| github.com/zeebo/blake3 | CC0-1.0 |
+| github.com/klauspost/cpuid/v2 | MIT |
 | golang.org/x/crypto, x/sys, x/net, x/sync, x/term | BSD-3-Clause, The Go Authors |
 
 ## JavaScript (built into the console)

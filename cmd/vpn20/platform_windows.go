@@ -21,6 +21,7 @@ import (
 
 	"github.com/lehuunghi/vpn/internal/config"
 	"github.com/lehuunghi/vpn/internal/engine"
+	"github.com/lehuunghi/vpn/internal/netcfg"
 
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/svc"
@@ -293,6 +294,9 @@ func manageService(action string) error {
 			return err
 		}
 		if action == "uninstall-service" {
+			if err := netcfg.RemovePublicHTTPS(context.Background()); err != nil {
+				return err
+			}
 			return s.Delete()
 		}
 		return nil

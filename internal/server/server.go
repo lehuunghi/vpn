@@ -20,7 +20,9 @@ import (
 
 	"github.com/lehuunghi/vpn/internal/auth"
 	"github.com/lehuunghi/vpn/internal/config"
+	"github.com/lehuunghi/vpn/internal/ddns"
 	"github.com/lehuunghi/vpn/internal/engine"
+	"github.com/lehuunghi/vpn/internal/netcfg"
 	"github.com/lehuunghi/vpn/internal/server/static"
 	"github.com/lehuunghi/vpn/internal/update"
 )
@@ -35,6 +37,7 @@ type Server struct {
 	usrLimit *auth.Limiter
 	http     *http.Server
 	updater  *update.Manager
+	ddns     *ddns.Manager
 }
 
 // New builds the router.
@@ -57,6 +60,10 @@ func New(cfg *config.Config, eng *engine.Engine, log *slog.Logger) *Server {
 	}
 	s.updater = update.New(update.Options{Version: engine.Version, Mode: mode, DataDir: cfg.DataDir, DBPath: cfg.DBPath, HTTPURL: update.LocalURL(cfg.HTTP, cfg.TLSEnabled()), TLSCert: cert, DockerSocket: cfg.UpdateDockerSocket, DockerContainer: cfg.UpdateDockerContainer, CertificateThumbprint: cfg.UpdateCertificateSHA1, Prerelease: cfg.UpdatePrerelease})
 	s.routes()
+	s.ddns = ddns.New(ddns.Options{APIURL: cfg.DDNSAPI, HTTPSListen: cfg.DDNSHTTPS,
+		DataDir: cfg.DataDir, ACMECA: cfg.DDNSACMECA, Store: eng.Store(),
+		Handler: s.Handler(), Activate: eng.SetEndpointHost, Log: log,
+		OpenFirewall: netcfg.AllowPublicHTTPS})
 	return s
 }
 
@@ -95,6 +102,8 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("listen %s: %w", s.cfg.HTTP, err)
 	}
+	s.ddns.Start(ctx)
+	defer s.ddns.Close()
 	errCh := make(chan error, 1)
 	go func() {
 		if tlsCfg != nil {
@@ -156,6 +165,8 @@ func (s *Server) routes() {
 	m.Handle("GET /api/update", s.admin(s.handleUpdateStatus))
 	m.Handle("POST /api/update/check", s.admin(s.handleUpdateCheck))
 	m.Handle("POST /api/update", s.admin(s.handleUpdateStart))
+	m.Handle("GET /api/subdomain", s.admin(s.handleSubdomain))
+	m.Handle("POST /api/subdomain", s.admin(s.handleSubdomainUpdate))
 	m.Handle("POST /api/peers", s.admin(s.handleCreatePeer))
 	m.Handle("PUT /api/peers/{id}", s.admin(s.handleUpdatePeer))
 	m.Handle("DELETE /api/peers/{id}", s.admin(s.handleDeletePeer))
@@ -231,7 +242,7 @@ func (s *Server) securityHeaders(next http.Handler) http.Handler {
 		h.Set("Referrer-Policy", "no-referrer")
 		h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
 		h.Set("Cross-Origin-Opener-Policy", "same-origin")
-		if s.cfg.TLSEnabled() || s.cfg.SecureCookies {
+		if r.TLS != nil || s.cfg.TLSEnabled() || s.cfg.SecureCookies {
 			h.Set("Strict-Transport-Security", "max-age=31536000")
 		}
 		if strings.HasPrefix(r.URL.Path, "/api/") {

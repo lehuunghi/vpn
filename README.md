@@ -24,6 +24,11 @@ Xem **[Cài đặt Windows, Linux, Docker, HTTPS và cập nhật tự động](
 Có hướng dẫn cho từng hệ điều hành, chọn kiến trúc, firewall/router, chứng chỉ, sao lưu và khôi phục.
 Quản trị viên có nút **Cập nhật phiên bản mới nhất** trong **Cài đặt**; Windows/Linux dịch vụ và Docker đã bật khả năng cập nhật được hỗ trợ.
 
+Trong **Cài đặt**, nhập **Subdomain** và bấm **Cập nhật** để dùng
+**ten.vpn.20.com.vn**, tự cập nhật IP và tự cấp/gia hạn SSL trên **TCP 443**.
+Quản trị dịch vụ cần nâng Worker lên 0.2.0 một lần; xem
+[hướng dẫn subdomain và SSL](docs/subdomain.md).
+
 ## Cài trực tiếp trên Windows
 
 Tải bộ cài Windows x64/x86 tại **[Releases](https://github.com/lehuunghi/vpn/releases)**.

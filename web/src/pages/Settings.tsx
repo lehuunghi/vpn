@@ -3,6 +3,7 @@ import { api, type Settings } from "../api";
 import { errorMessage, useAuth, useLive, useToast } from "../state";
 import { Check, Field } from "../components/ui";
 import { Updater } from "../components/Updater";
+import { Subdomain } from "../components/Subdomain";
 
 export function SettingsPage() {
   const { me } = useAuth();
@@ -106,6 +107,7 @@ export function SettingsPage() {
           </div>
         )}
       </form>
+      {!readOnly && <Subdomain />}
       {!readOnly && <Updater />}
     </>
   );

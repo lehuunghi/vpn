@@ -15,3 +15,5 @@ internal/server/static/dist/*
 *.log
 .env
 /secrets/
+deploy/ddns-worker/node_modules/
+deploy/ddns-worker/.wrangler/
