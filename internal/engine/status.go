@@ -20,6 +20,7 @@ type SysctlStatus struct {
 
 // Status is the server overview.
 type Status struct {
+	ClientEndpoint  string         `json:"clientEndpoint"`
 	Platform        string         `json:"platform"`
 	Version         string         `json:"version"`
 	Backend         string         `json:"backend"`
@@ -62,6 +63,7 @@ func (e *Engine) Status() Status {
 		FirewallManaged: e.cfg.ManageFirewall && e.be.Kind() != "mock",
 		StartedAt:       e.startedAt,
 		Settings:        e.settings,
+		ClientEndpoint:  e.clientEndpoint(e.settings),
 		Sysctls:         []SysctlStatus{},
 	}
 	if e.cfg.Subnet6.IsValid() {

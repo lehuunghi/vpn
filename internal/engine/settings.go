@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/netip"
 	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/lehuunghi/vpn/internal/store"
@@ -37,6 +39,13 @@ type Settings struct {
 	// ConnectedWindow is how many seconds since the last handshake still
 	// counts as connected. WireGuard rejects sessions after 180 s.
 	ConnectedWindow int `json:"connectedWindow"`
+}
+
+func (e *Engine) clientEndpoint(s Settings) string {
+	if host, port, enabled := e.relay.Endpoint(); enabled {
+		return net.JoinHostPort(host, strconv.Itoa(port))
+	}
+	return net.JoinHostPort(s.EndpointHost, strconv.Itoa(s.EndpointPort))
 }
 
 // DefaultSettings returns what a fresh install starts with.

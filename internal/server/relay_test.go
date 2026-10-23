@@ -83,6 +83,9 @@ func TestRelayAdminAuthorizationAndEndpointSelection(t *testing.T) {
 	if !strings.Contains(before, "Endpoint = relay.example.test:20001") {
 		t.Fatal("export did not select relay")
 	}
+	if eng.Status().ClientEndpoint != "relay.example.test:20001" {
+		t.Fatal("dashboard endpoint did not select relay")
+	}
 	// DDNS updates the direct hostname; selected relay endpoint must survive it.
 	if err := eng.SetEndpointHost(t.Context(), "ddns.example.test"); err != nil {
 		t.Fatal(err)
@@ -97,6 +100,9 @@ func TestRelayAdminAuthorizationAndEndpointSelection(t *testing.T) {
 	c.expect("PUT", "/api/relay", vpsrelay.Input{Enabled: false}, 202)
 	if !strings.Contains(eng.ClientConfig(peer), "Endpoint = ddns.example.test:51820") {
 		t.Fatal("disable did not restore direct endpoint")
+	}
+	if eng.Status().ClientEndpoint != "ddns.example.test:51820" {
+		t.Fatal("dashboard endpoint did not restore direct host")
 	}
 	c.expect("POST", "/api/users", map[string]string{"username": "viewer", "password": "long-enough-password", "role": "viewer"}, 201)
 	c.expect("POST", "/api/auth/logout", nil, 200)

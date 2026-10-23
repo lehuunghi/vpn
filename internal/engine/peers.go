@@ -4,10 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"net/netip"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -427,11 +425,7 @@ func (e *Engine) ClientConfig(p *store.Peer) string {
 		fmt.Fprintf(&b, "PresharedKey = %s\n", p.PresharedKey)
 	}
 	fmt.Fprintf(&b, "AllowedIPs = %s\n", p.ClientRoutes)
-	host, port := s.EndpointHost, s.EndpointPort
-	if relayHost, relayPort, enabled := e.relay.Endpoint(); enabled {
-		host, port = relayHost, relayPort
-	}
-	fmt.Fprintf(&b, "Endpoint = %s\n", net.JoinHostPort(host, strconv.Itoa(port)))
+	fmt.Fprintf(&b, "Endpoint = %s\n", e.clientEndpoint(s))
 	ka := p.Keepalive
 	if ka == 0 {
 		ka = s.Keepalive

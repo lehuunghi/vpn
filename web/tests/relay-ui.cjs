@@ -71,6 +71,8 @@ manager=m.Manager(work/"vps");manager.init("relay.example.test",443,20001,20100,
     assert.equal(status.enabled,true);
     assert.equal(status.domain,"relay.example.test");
     assert.equal(status.remotePort,20001);
+    const overview=await (await context.request.get(url+"/api/status")).json();
+    assert.equal(overview.clientEndpoint,"relay.example.test:20001","Dashboard endpoint mismatch");
     for(const field of ["accessKey","token","ca","profileZip"]) assert(!(field in status),"Private data in status");
     const peerResponse=await context.request.post(url+"/api/peers",{data:{
       name:"UI relay device",clientRoutes:"10.8.0.0/24",dns:"",keepalive:null,mtu:null,expiresAt:null,

@@ -142,6 +142,7 @@ export interface SysctlStatus {
 }
 
 export interface Status {
+  clientEndpoint: string;
 	platform: string;
   version: string;
   backend: "kernel" | "userspace" | "wireguardnt" | "relay" | "mock";
