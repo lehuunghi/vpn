@@ -25,15 +25,15 @@ type PeerInput struct {
 	// pair and the server never sees the private key.
 	PublicKey string `json:"publicKey,omitempty"`
 	// IPv4 / IPv6 may pin addresses; empty means allocate.
-	IPv4         string `json:"ipv4,omitempty"`
-	IPv6         string `json:"ipv6,omitempty"`
-	ClientRoutes string `json:"clientRoutes"`
-	DNS          string `json:"dns"`
-	Keepalive    *int   `json:"keepalive"`
-	MTU          *int   `json:"mtu"`
-	Enabled      *bool  `json:"enabled"`
+	IPv4         string     `json:"ipv4,omitempty"`
+	IPv6         string     `json:"ipv6,omitempty"`
+	ClientRoutes string     `json:"clientRoutes"`
+	DNS          string     `json:"dns"`
+	Keepalive    *int       `json:"keepalive"`
+	MTU          *int       `json:"mtu"`
+	Enabled      *bool      `json:"enabled"`
 	ExpiresAt    *time.Time `json:"expiresAt"`
-	Notes        string `json:"notes"`
+	Notes        string     `json:"notes"`
 }
 
 // ErrValidation marks user errors so the API can answer 400.
@@ -427,7 +427,11 @@ func (e *Engine) ClientConfig(p *store.Peer) string {
 		fmt.Fprintf(&b, "PresharedKey = %s\n", p.PresharedKey)
 	}
 	fmt.Fprintf(&b, "AllowedIPs = %s\n", p.ClientRoutes)
-	fmt.Fprintf(&b, "Endpoint = %s\n", net.JoinHostPort(s.EndpointHost, strconv.Itoa(s.EndpointPort)))
+	host, port := s.EndpointHost, s.EndpointPort
+	if relayHost, relayPort, enabled := e.relay.Endpoint(); enabled {
+		host, port = relayHost, relayPort
+	}
+	fmt.Fprintf(&b, "Endpoint = %s\n", net.JoinHostPort(host, strconv.Itoa(port)))
 	ka := p.Keepalive
 	if ka == 0 {
 		ka = s.Keepalive

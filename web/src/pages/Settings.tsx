@@ -4,6 +4,7 @@ import { errorMessage, useAuth, useLive, useToast } from "../state";
 import { Check, Field } from "../components/ui";
 import { Updater } from "../components/Updater";
 import { Subdomain } from "../components/Subdomain";
+import { Relay } from "../components/Relay";
 
 export function SettingsPage() {
   const { me } = useAuth();
@@ -52,11 +53,11 @@ export function SettingsPage() {
         {readOnly && <div className="notice">Bạn có vai trò chỉ xem nên không thể chỉnh sửa cài đặt.</div>}
         <div className="card">
           <div className="card-head">
-            <h2>Điểm kết nối</h2>
+            <h2>Điểm kết nối trực tiếp</h2>
           </div>
           <div className="card-body">
             <div className="form-cols">
-              <Field label="Địa chỉ máy chủ" hint="Địa chỉ máy chủ mà thiết bị kết nối đến.">
+              <Field label="Địa chỉ máy chủ" hint="Địa chỉ thiết bị kết nối khi tắt server relay.">
                 <input className="input" value={s.endpointHost} onChange={(e) => set("endpointHost", e.target.value)} disabled={readOnly} required />
               </Field>
               <Field label="Cổng công khai" hint="Cổng thiết bị kết nối đến. Thường là cổng lắng nghe; đổi giá trị nếu cổng UDP của container được ánh xạ lại.">
@@ -107,6 +108,7 @@ export function SettingsPage() {
           </div>
         )}
       </form>
+      {!readOnly && <Relay />}
       {!readOnly && <Subdomain />}
       {!readOnly && <Updater />}
     </>

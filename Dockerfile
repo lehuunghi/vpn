@@ -17,6 +17,16 @@ RUN go mod download
 COPY cmd/ cmd/
 COPY internal/ internal/
 COPY --from=web /src/internal/server/static/dist internal/server/static/dist
+RUN mkdir -p /third-party-licenses \
+    && go list -m -f '{{.Path}}|{{.Dir}}' all > /tmp/modules \
+    && while IFS='|' read -r module directory; do \
+         [ -d "$directory" ] || continue; \
+         target="/third-party-licenses/$(printf '%s' "$module" | tr / _)"; \
+         for file in "$directory"/LICENSE* "$directory"/COPYING* "$directory"/NOTICE*; do \
+           [ -f "$file" ] || continue; \
+           mkdir -p "$target"; cp "$file" "$target/"; \
+         done; \
+       done < /tmp/modules
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X github.com/lehuunghi/vpn/internal/engine.Version=${VPN20_VERSION}" -o /vpn20 ./cmd/vpn20
 
 # ---- runtime ----
@@ -27,6 +37,7 @@ RUN apk add --no-cache nftables wireguard-go wireguard-tools ca-certificates tzd
     && mkdir -p /data
 COPY --from=build /vpn20 /usr/local/bin/vpn20
 COPY LICENSE NOTICE /usr/share/doc/vpn20/
+COPY --from=build /third-party-licenses /usr/share/doc/vpn20/licenses/
 ENV VPN20_DATA_DIR=/data \
 	VPN20_UPDATE_MODE=docker \
     VPN20_HTTP_LISTEN=:51821

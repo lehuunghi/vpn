@@ -16,6 +16,7 @@ import (
 	"github.com/lehuunghi/vpn/internal/config"
 	"github.com/lehuunghi/vpn/internal/netcfg"
 	"github.com/lehuunghi/vpn/internal/store"
+	"github.com/lehuunghi/vpn/internal/vpsrelay"
 	"github.com/lehuunghi/vpn/internal/wg"
 )
 
@@ -28,10 +29,11 @@ const (
 
 // Engine is the long-running core.
 type Engine struct {
-	cfg *config.Config
-	st  *store.Store
-	be  wg.Backend
-	log *slog.Logger
+	cfg   *config.Config
+	st    *store.Store
+	be    wg.Backend
+	log   *slog.Logger
+	relay *vpsrelay.Manager
 
 	mu             sync.RWMutex
 	settingsMu     sync.Mutex
@@ -57,6 +59,7 @@ type Engine struct {
 func New(cfg *config.Config, st *store.Store, be wg.Backend, log *slog.Logger) *Engine {
 	e := &Engine{cfg: cfg, st: st, be: be, log: log, peers: map[string]*store.Peer{}, byKey: map[string]*store.Peer{}, hub: NewHub()}
 	e.col = newCollector(e)
+	e.relay = vpsrelay.New(vpsrelay.Options{Store: st, LocalPort: cfg.ListenPort})
 	return e
 }
 
@@ -65,6 +68,8 @@ func (e *Engine) Store() *store.Store { return e.st }
 
 // Config exposes the process configuration.
 func (e *Engine) Config() *config.Config { return e.cfg }
+
+func (e *Engine) Relay() *vpsrelay.Manager { return e.relay }
 
 // Hub is the live-update fan-out.
 func (e *Engine) Hub() *Hub { return e.hub }
@@ -159,11 +164,13 @@ func (e *Engine) Start(ctx context.Context) error {
 	e.wg.Add(2)
 	go func() { defer e.wg.Done(); e.col.run(loopCtx) }()
 	go func() { defer e.wg.Done(); e.housekeeping(loopCtx) }()
+	e.relay.Start(loopCtx)
 	return nil
 }
 
 // Stop halts the loops, flushes counters and tears the interface down.
 func (e *Engine) Stop(ctx context.Context) error {
+	e.relay.Close()
 	if e.cancel != nil {
 		e.cancel()
 		e.wg.Wait()

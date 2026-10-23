@@ -215,6 +215,18 @@ export interface UpdateStatus {
   job: { id?: string; phase: string; version?: string; message?: string; updatedAt?: string };
 }
 
+export interface RelayStatus {
+  enabled: boolean;
+  configured: boolean;
+  domain: string;
+  profileName?: string;
+  controlPort?: number;
+  remotePort?: number;
+  endpoint?: string;
+  phase: "disabled" | "connecting" | "connected" | "error";
+  message: string;
+}
+
 export interface SubdomainStatus {
   name: string;
   hostname?: string;
@@ -267,6 +279,8 @@ export const api = {
   usage: (range: Range) => get<TrafficPoint[]>(`/api/usage?range=${range}`),
   usageByPeer: (range: Range) => get<PeerUsage[]>(`/api/usage/peers?range=${range}`),
   settings: () => get<Settings>("/api/settings"),
+  relay: () => get<RelayStatus>("/api/relay"),
+  saveRelay: (body: { enabled: boolean; domain: string; profileZip?: string }) => put<RelayStatus>("/api/relay", body),
   saveSettings: (body: Settings) => put<Settings>("/api/settings", body),
   audit: (limit = 200) => get<AuditEntry[]>(`/api/audit?limit=${limit}`),
   users: () => get<User[]>("/api/users"),

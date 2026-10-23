@@ -139,6 +139,8 @@ export function technicalMessage(message?: string): string {
 }
 
 const auditActions: Record<string, string> = {
+  "relay.enabled": "Bật server relay",
+  "relay.disabled": "Tắt server relay",
   setup: "Thiết lập hệ thống",
   login: "Đăng nhập",
   "login.failed": "Đăng nhập thất bại",

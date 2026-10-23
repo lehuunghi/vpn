@@ -51,6 +51,34 @@ ZIP đầu tiên:
 Dùng SCP/WinSCP tải ZIP riêng về máy cài VPN20, giải nén và giữ các tệp cùng
 thư mục. ZIP có khóa profile; chỉ gửi cho chủ máy này, không công khai ZIP.
 
+**VPN20 1.3.0 trở lên:** mở **Cài đặt → Server relay**, bật **Dùng server relay**,
+nhập domain VPS, chọn ZIP trên và bấm **Cập nhật relay**. Không cần giải nén hay
+chạy script client riêng. Có thể để trống domain khi nhập ZIP để tự lấy domain.
+Ứng dụng tự dùng cổng điều phối, cổng UDP và khóa riêng từ profile; luôn xác minh
+CA/hostname SSL và nối về cổng UDP thực tế của VPN20.
+
+Chờ **Đã kết nối relay**, tải lại .conf hoặc quét lại QR trên các thiết bị.
+Endpoint relay được điền tự động. DDNS thay đổi hostname quản trị không ghi đè
+Endpoint relay. Cấu hình và khóa giữ qua nâng cấp/khởi động lại. Khi tắt relay,
+ứng dụng xuất lại điểm kết nối trực tiếp đã lưu.
+
+Nếu đang chạy client độc lập bằng cùng profile, dừng nó trước khi chuyển vào
+VPN20. Ví dụ profile **office**:
+
+~~~powershell
+Stop-ScheduledTask -TaskName VPN20-Relay-office
+Disable-ScheduledTask -TaskName VPN20-Relay-office
+~~~
+
+~~~bash
+sudo systemctl disable --now vpn20-relay-client-office.service
+~~~
+
+Các lệnh Windows chạy trong PowerShell Administrator; Linux dùng sudo. Chỉ
+dừng client của profile đang chuyển, giữ dịch vụ relay trên VPS hoạt động.
+
+### Client độc lập cho VPN20 cũ
+
 Windows x64: mở PowerShell Administrator tại thư mục giải nén:
 
 ~~~powershell
@@ -77,10 +105,14 @@ Giữ khóa, DNS và AllowedIPs. Cổng thực tế có trong README của ZIP.
 Mỗi máy chủ VPN20 được cấp một cổng; nhiều thiết bị của máy đó cùng dùng cổng này.
 Máy VPN20 chủ động kết nối ra VPS, không cần chuyển tiếp UDP 51820 trên router.
 
-**App VPN20 hiện chưa tự quản lý frpc/Endpoint relay.** Cấu hình tải lại từ app
-có thể dùng Endpoint DDNS cũ; hãy giữ/sửa Endpoint relay trong cấu hình thiết bị.
+Với VPN20 trước 1.3.0, cấu hình tải lại từ app có thể dùng Endpoint DDNS cũ;
+hãy giữ/sửa Endpoint relay trong cấu hình thiết bị hoặc nâng cấp ứng dụng.
 Relay này chỉ chuyển UDP WireGuard. Muốn public trang quản trị cần đường TCP/HTTPS
 riêng; máy VPN20 vẫn giữ cổng quản trị hiện có, mặc định 51821.
+
+Relay dùng TLS/TCP giữa máy VPN20 và VPS để chở gói WireGuard UDP. Khi đường
+truyền mất gói, hiệu năng/độ trễ có thể kém kết nối UDP trực tiếp. Không tự xuyên
+NAT bằng STUN hoặc chuyển đường trực tiếp; đây là đường relay đã chọn.
 
 ## Thêm, xuất lại và thu hồi profile
 

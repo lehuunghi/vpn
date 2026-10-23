@@ -46,6 +46,7 @@ jobs:
           flavor: latest=false
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=${{ steps.version.outputs.version }},enable={{is_default_branch}}
             type=ref,event=branch
             type=ref,event=tag
             type=match,pattern=^v(.*)$,group=1
