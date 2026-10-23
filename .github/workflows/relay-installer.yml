@@ -52,7 +52,7 @@ jobs:
         run: python3 -m unittest discover -s deploy/relay/tests -v
       - name: Actual systemd installation, repeat installation and rollback
         run: |
-          sudo env "PATH=$PATH" GITHUB_ACTIONS=true FRP_ARCHIVE=/tmp/frp-relay-ci/frp.tar.gz FRPC=/tmp/frp-relay-ci/frp_0.71.1_linux_amd64/frpc bash deploy/relay/tests/smoke-install.sh
+          sudo env "PATH=$PATH" GITHUB_ACTIONS=true VPN20_TEST_RELAY_UPGRADE=${{ matrix.os == 'ubuntu-22.04' && '1' || '0' }} FRP_ARCHIVE=/tmp/frp-relay-ci/frp.tar.gz FRPC=/tmp/frp-relay-ci/frp_0.71.1_linux_amd64/frpc bash deploy/relay/tests/smoke-install.sh
       - name: Export disposable client fixture for Windows checks
         if: matrix.os == 'ubuntu-24.04'
         run: |
