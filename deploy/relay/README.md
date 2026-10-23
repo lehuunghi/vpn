@@ -1,4 +1,4 @@
-# VPN20 Relay 1.1.0 — domain và mật khẩu
+# VPN20 Relay 1.1.1 — domain và mật khẩu
 
 Cài relay lên VPS, đặt domain và mật khẩu. Trong VPN20 **1.4.0 trở lên**, mở
 **Cài đặt → Server relay**, nhập hai thông tin này rồi bấm **Cập nhật relay**.
@@ -23,6 +23,16 @@ sudo bash -c 'set -e; f="$(mktemp)"; trap '\''rm -f "$f"'\'' EXIT; curl -fsSL --
 Sau domain, bộ cài hỏi **Mật khẩu relay** và **Nhập lại mật khẩu relay**.
 Mật khẩu dài **12–256 ký tự**, nhập ẩn; không đặt mật khẩu vào câu lệnh.
 Nếu VPS thiếu curl: **sudo apt-get update && sudo apt-get install -y curl**.
+
+Nếu bản 1.1.0 dừng ở **Cần terminal để đặt mật khẩu** dù đang mở SSH, tải lại
+bộ cài hiện hành và chạy lại lệnh trên; bản 1.1.1 sửa bước đọc mật khẩu terminal.
+Dòng Domain/TCP/UDP chỉ là xác nhận tham số, chưa báo cài thành công. Lệnh
+`vpn20-relay password` chỉ có sau khi bộ cài tạo chương trình quản lý.
+
+Với SSH chạy lệnh từ xa, dùng `ssh -t` để cấp terminal. Với công cụ chạy lệnh
+tự động không có TTY, `--password-file` là đường dẫn tới **tệp trên VPS chứa
+mật khẩu trong một dòng**, không phải mật khẩu truyền trực tiếp và không phải
+ZIP profile. Dùng tệp chỉ root được đọc và xóa sau khi cài.
 
 Bộ cài kiểm tra SHA-256 của frps và mã quản lý, tự cấp/gia hạn Let's Encrypt,
 cấu hình dịch vụ tự khởi động và mở rule trong UFW/firewalld nếu đang hoạt động.

@@ -20,8 +20,8 @@ key=''
 ca=''
 source_dir=''
 archive=''
-helper_hash=b943afa4d7ad7d19f209cb658eb46a5d4834fc51fba41e97519693858f12f9e2
-helper_blob=1f0e0fba81e9e4e2379cd318ccdc25560468c8b9
+helper_hash=3b6200950662059da5d7db4360b5a6c1f5353b51689a5582ec2fd057d9990cae
+helper_blob=b1191706d0cd41d7a342472aebe680697540c1b2
 frp_version=0.71.1
 work=''
 transaction=0
@@ -188,7 +188,7 @@ s=manager.init(sys.argv[3],*sys.argv[4:9])
 print("Domain:",s["domain"],"TCP:",s["control_port"],"UDP:",str(s["port_start"])+"–"+str(s["port_end"]))
 PY
 python3 - "$work/relay.py" "$work/stage" "$backend" "$password_file" <<'PY'
-import getpass,grp,importlib.util,pathlib,sqlite3,sys
+import grp,importlib.util,pathlib,sqlite3,sys
 spec=importlib.util.spec_from_file_location("relay",sys.argv[1])
 m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
 manager=m.Manager(sys.argv[2],grp.getgrnam("vpn20-relay").gr_gid)
@@ -206,13 +206,9 @@ if sys.argv[4]:
     manager.set_password(password)
 elif not (manager.root/"enrollment.json").exists():
     try:
-        with open("/dev/tty","r+") as tty:
-            password=getpass.getpass("Mật khẩu relay (ít nhất 12 ký tự): ",stream=tty)
-            if password!=getpass.getpass("Nhập lại mật khẩu relay: ",stream=tty):
-                raise SystemExit("Hai mật khẩu không khớp")
-    except OSError:
-        raise SystemExit("Cần terminal để đặt mật khẩu; cài tự động dùng --password-file")
-    manager.set_password(password)
+        manager.set_password(m.prompt_password())
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from None
 manager.save(s)
 PY
 domain="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["domain"])' "$work/stage/state.json")"
@@ -404,7 +400,7 @@ PY
 systemctl is-active --quiet "$unit"
 committed=1
 echo
-echo "Đã cài VPN20 relay 1.1.0: $domain:$control/TCP; UDP $first–$last."
+echo "Đã cài VPN20 relay 1.1.1: $domain:$control/TCP; UDP $first–$last."
 echo 'VPN20 1.4.0: mở Cài đặt → Server relay, nhập domain và mật khẩu vừa đặt.'
 echo 'Không tải ZIP, không cài client riêng. Mỗi máy tự nhận khóa và cổng UDP riêng.'
 echo 'Đổi mật khẩu: sudo vpn20-relay password'

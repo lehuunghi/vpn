@@ -27,9 +27,10 @@ import tempfile
 import threading
 import time
 import urllib.parse
+import warnings
 import zipfile
 
-VERSION = "1.1.0"
+VERSION = "1.1.1"
 FRP_VERSION = "0.71.1"
 FRP_HASHES = {
     "linux_amd64": "1d9875210972a5d1a62b2dc4c48df45ab0af05d3ca1b5e494a014428259df803",
@@ -37,6 +38,31 @@ FRP_HASHES = {
     "windows_amd64": "b90074b2b6a1d792a7a40f085ac6d276bcab2d1bc60201f8a86ca53ce65ce821",
 }
 NAME = re.compile(r"[a-z0-9][a-z0-9-]{0,39}\Z")
+
+
+def prompt_password():
+    # A buffered r+ stream requires seeking and cannot open a Linux tty.
+    # getpass already uses unbuffered terminal I/O; only check for a real tty
+    # here so it can never fall back to echoing a password from stdin.
+    try:
+        fd = os.open("/dev/tty", os.O_RDWR | os.O_NOCTTY)
+    except OSError:
+        raise ValueError("Không có terminal tương tác (TTY). Mở SSH có terminal hoặc dùng --password-file cho cài tự động.") from None
+    try:
+        if not os.isatty(fd):
+            raise ValueError("Cần terminal tương tác hoặc --password-file.")
+    finally:
+        os.close(fd)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", getpass.GetPassWarning)
+        try:
+            password = getpass.getpass("Mật khẩu relay (ít nhất 12 ký tự): ")
+            confirmation = getpass.getpass("Nhập lại mật khẩu relay: ")
+        except (OSError, EOFError, getpass.GetPassWarning):
+            raise ValueError("Không đọc được mật khẩu từ terminal. Mở SSH có terminal hoặc dùng --password-file cho cài tự động.") from None
+    if password != confirmation:
+        raise ValueError("Hai mật khẩu không khớp")
+    return password
 
 
 def domain(value):
@@ -794,10 +820,7 @@ def main():
     if args.command == "sync-tls":
         print("Đã nạp TLS mới" if m.sync_tls() else "TLS không thay đổi")
     elif args.command == "password":
-        password = getpass.getpass("Mật khẩu relay mới (ít nhất 12 ký tự): ")
-        if password != getpass.getpass("Nhập lại mật khẩu relay: "):
-            raise ValueError("Hai mật khẩu không khớp")
-        m.set_password(password)
+        m.set_password(prompt_password())
         print("Đã đổi mật khẩu đăng ký. Các máy đã đăng ký vẫn giữ khóa riêng.")
     elif args.command == "list":
         s = m.state()
