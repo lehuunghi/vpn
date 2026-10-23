@@ -79,15 +79,22 @@ func New(opts Options) *Manager {
 	m := &Manager{opts: opts, state: savedState{Schema: 1}}
 	raw, err := opts.Store.GetSetting(context.Background(), stateKey)
 	if err == nil && raw != "" {
-		err = json.Unmarshal([]byte(raw), &m.state)
-		if err == nil && (m.state.Schema != 1 || (m.state.Profile.Name != "" && m.state.Profile.validate() != nil)) {
+		var saved savedState
+		err = json.Unmarshal([]byte(raw), &saved)
+		if err == nil && (saved.Schema != 1 || (saved.Profile.Name != "" && saved.Profile.validate() != nil)) {
 			err = errors.New("invalid saved profile")
 		}
-		if err == nil && m.state.Enabled {
-			_, err = Domain(m.state.Domain)
-			if m.state.Profile.Name == "" {
-				err = errors.New("missing profile")
-			}
+		if err == nil && saved.Profile.Name != "" {
+			saved.Domain, err = Domain(saved.Domain)
+		}
+		if err == nil && saved.Enabled && saved.Profile.Name == "" {
+			err = errors.New("missing profile")
+		}
+		// JSON decoding may partially populate its destination before failing.
+		// Publish restored state only after every check passes, so corrupt data
+		// cannot become the endpoint exported to devices or survive a disable.
+		if err == nil {
+			m.state = saved
 		}
 	}
 	if err != nil {

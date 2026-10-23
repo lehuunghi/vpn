@@ -187,3 +187,86 @@ func TestPersistenceCredentialsAndFailedSave(t *testing.T) {
 		t.Fatal("custom domain not retained")
 	}
 }
+
+func TestCorruptSavedStateAndRecovery(t *testing.T) {
+	ca, _ := fixtureCertificate(t)
+	archive := zipProfile(t, profileConfig(443, 20001), ca, nil)
+	p, err := parseProfile(archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	valid := savedState{Schema: 1, Enabled: true, Domain: p.Host, Profile: p}
+	for _, name := range []string{"schema", "port", "key", "ca", "domain", "disabled domain", "missing profile", "partial JSON"} {
+		t.Run(name, func(t *testing.T) {
+			saved := valid
+			switch name {
+			case "schema":
+				saved.Schema = 2
+			case "port":
+				saved.Profile.RemotePort = 0
+			case "key":
+				saved.Profile.AccessKey = "invalid"
+			case "ca":
+				saved.Profile.CA = "invalid"
+			case "domain":
+				saved.Domain = "https://bad.test"
+			case "disabled domain":
+				saved.Enabled, saved.Domain = false, "https://bad.test"
+			case "missing profile":
+				saved.Profile = profile{}
+			}
+			data, err := json.Marshal(saved)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if name == "partial JSON" {
+				// A type error occurs after enabled/profile have been decoded.
+				data = []byte(strings.TrimSuffix(string(data), "}") + `,"schema":"invalid"}`)
+			}
+			st := &memoryStore{value: string(data)}
+			opts := Options{Store: st, LocalPort: 51820}
+			m := New(opts)
+			if host, port, enabled := m.Endpoint(); enabled || host != "" || port != 0 {
+				t.Fatalf("corrupt saved state selected an endpoint: %q %d %v", host, port, enabled)
+			}
+			s := m.Snapshot()
+			if s.Phase != "error" || s.Configured || s.Enabled || s.Endpoint != "" {
+				t.Fatalf("corrupt saved state advertised as configured: %+v", s)
+			}
+			if st.value != string(data) {
+				t.Fatal("loading overwrote saved data needed for recovery")
+			}
+			if _, err := m.Configure(t.Context(), Input{Enabled: true}); err == nil {
+				t.Fatal("re-enabled corrupt profile without a replacement")
+			}
+			if _, err := m.Configure(t.Context(), Input{Enabled: false}); err != nil {
+				t.Fatal(err)
+			}
+			if got := New(opts).Snapshot(); got.Phase != "disabled" || got.Configured {
+				t.Fatalf("disable did not persist a clean state: %+v", got)
+			}
+			if _, err := m.Configure(t.Context(), Input{Enabled: true, ProfileZIP: archive}); err != nil {
+				t.Fatal(err)
+			}
+			if host, port, on := New(opts).Endpoint(); !on || host != p.Host || port != p.RemotePort {
+				t.Fatal("replacement profile did not survive restart")
+			}
+		})
+	}
+}
+
+func TestRestoredDomainNormalization(t *testing.T) {
+	ca, _ := fixtureCertificate(t)
+	p, err := parseProfile(zipProfile(t, profileConfig(443, 20001), ca, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := json.Marshal(savedState{Schema: 1, Enabled: true, Domain: " RELAY.EXAMPLE.TEST. ", Profile: p})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := New(Options{Store: &memoryStore{value: string(data)}, LocalPort: 51820})
+	if host, port, on := m.Endpoint(); !on || host != p.Host || port != p.RemotePort {
+		t.Fatalf("restored endpoint was not normalized: %q %d %v", host, port, on)
+	}
+}
