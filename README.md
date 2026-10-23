@@ -25,7 +25,8 @@ Có hướng dẫn cho từng hệ điều hành, chọn kiến trúc, firewall/
 Quản trị viên có nút **Cập nhật phiên bản mới nhất** trong **Cài đặt**; Windows/Linux dịch vụ và Docker đã bật khả năng cập nhật được hỗ trợ.
 
 Trong **Cài đặt**, nhập **Subdomain** và bấm **Cập nhật** để dùng
-**ten.vpn.20.com.vn**, tự cập nhật IP và tự cấp/gia hạn SSL trên **TCP 8443**.
+**https://ten.vpn.20.com.vn:51821**, tự cập nhật IP và tự cấp/gia hạn SSL
+ngay trên cổng quản trị **TCP 51821**, không mở cổng HTTPS riêng.
 Quản trị dịch vụ cần nâng Worker lên 0.2.1 một lần; xem
 [hướng dẫn subdomain và SSL](docs/subdomain.md).
 

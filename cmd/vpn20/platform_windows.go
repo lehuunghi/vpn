@@ -121,6 +121,7 @@ func enableLAN() error {
 		settings = map[string]string{}
 	}
 	settings["VPN20_HTTP_LISTEN"] = address
+	delete(settings, "VPN20_DDNS_HTTPS") // Retired standalone HTTPS listener.
 	data, err := json.MarshalIndent(settings, "", "  ")
 	if err != nil {
 		return err

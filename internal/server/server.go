@@ -60,16 +60,16 @@ func New(cfg *config.Config, eng *engine.Engine, log *slog.Logger) *Server {
 	}
 	s.updater = update.New(update.Options{Version: engine.Version, Mode: mode, DataDir: cfg.DataDir, DBPath: cfg.DBPath, HTTPURL: update.LocalURL(cfg.HTTP, cfg.TLSEnabled()), TLSCert: cert, DockerSocket: cfg.UpdateDockerSocket, DockerContainer: cfg.UpdateDockerContainer, CertificateThumbprint: cfg.UpdateCertificateSHA1, Prerelease: cfg.UpdatePrerelease})
 	s.routes()
-	s.ddns = ddns.New(ddns.Options{APIURL: cfg.DDNSAPI, HTTPSListen: cfg.DDNSHTTPS,
+	s.ddns = ddns.New(ddns.Options{APIURL: cfg.DDNSAPI, AdminAddress: cfg.HTTP,
 		DataDir: cfg.DataDir, ACMECA: cfg.DDNSACMECA, Store: eng.Store(),
-		Handler: s.Handler(), Activate: eng.SetEndpointHost, Log: log,
+		Activate: eng.SetEndpointHost, Log: log,
 		OpenFirewall: netcfg.AllowPublicHTTPS})
 	return s
 }
 
 // Handler returns the full middleware chain, for tests and for ListenAndServe.
 func (s *Server) Handler() http.Handler {
-	return s.recoverer(s.securityHeaders(s.mux))
+	return s.automaticHTTPS(s.recoverer(s.securityHeaders(s.mux)))
 }
 
 // ListenAndServe runs until ctx is cancelled.
@@ -85,14 +85,20 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 		MaxHeaderBytes: 64 << 10,
 		ErrorLog:       slog.NewLogLogger(s.log.Handler(), slog.LevelWarn),
 	}
-	var tlsCfg *tls.Config
+	tlsCfg := &tls.Config{MinVersion: tls.VersionTLS12, NextProtos: []string{"http/1.1"}, GetCertificate: s.ddns.GetCertificate}
 	if s.cfg.TLSEnabled() {
 		cert, err := s.loadCertificate()
 		if err != nil {
 			return err
 		}
 		tlsCfg = &tls.Config{
-			Certificates:     []tls.Certificate{cert},
+			Certificates: []tls.Certificate{cert},
+			GetCertificate: func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+				if automatic, err := s.ddns.GetCertificate(hello); err == nil {
+					return automatic, nil
+				}
+				return &cert, nil
+			},
 			MinVersion:       tls.VersionTLS12,
 			CurvePreferences: []tls.CurveID{tls.X25519, tls.CurveP256},
 		}
@@ -102,17 +108,26 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("listen %s: %w", s.cfg.HTTP, err)
 	}
+	s.ddns.SetAdminAddress(ln.Addr().String())
+	// Remove the previous release's standalone HTTPS firewall rule. The new
+	// rule is added for this admin port only after a certificate is available.
+	if err := netcfg.RemovePublicHTTPS(ctx); err != nil {
+		s.log.Warn("remove obsolete HTTPS firewall rule", "error", err)
+	}
 	s.ddns.Start(ctx)
 	defer s.ddns.Close()
 	errCh := make(chan error, 1)
 	go func() {
-		if tlsCfg != nil {
+		if s.cfg.TLSEnabled() {
 			errCh <- s.http.ServeTLS(ln, "", "")
 		} else {
-			errCh <- s.http.Serve(ln)
+			s.http.ConnContext = func(ctx context.Context, conn net.Conn) context.Context {
+				return context.WithValue(ctx, protocolKey{}, conn)
+			}
+			errCh <- s.http.Serve(&adminListener{Listener: ln, ctx: ctx, tls: tlsCfg})
 		}
 	}()
-	s.log.Info("admin UI listening", "addr", ln.Addr().String(), "tls", tlsCfg != nil)
+	s.log.Info("admin UI listening", "addr", ln.Addr().String(), "tls", s.cfg.TLSEnabled(), "automatic_https", true)
 	select {
 	case <-ctx.Done():
 		shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)

@@ -25,7 +25,8 @@ Windows có máy chủ RDP. Chưa kiểm thử trực tiếp mọi edition/thi�
 
 Để cấp tên **ten.vpn.20.com.vn** và SSL tự động chỉ bằng một nút trong
 Cài đặt, xem [Subdomain và HTTPS tự động](subdomain.md). Tính năng dùng
-**TCP 8443** và giữ truy cập LAN ở cổng 51821.
+cùng cổng quản trị **TCP 51821**: https://ten.vpn.20.com.vn:51821.
+HTTP bằng IP LAN vẫn dùng để thiết lập/khôi phục; không cần cổng HTTPS phụ.
 
 1. Đặt IP LAN cố định hoặc DHCP reservation cho máy chủ.
 2. Chọn IP công khai/tên miền, ví dụ `vpn.example.com`; tên miền phải trỏ

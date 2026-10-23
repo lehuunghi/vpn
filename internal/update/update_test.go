@@ -61,7 +61,7 @@ func TestSelectCompatibleReleaseAndRejectUntrustedAssets(t *testing.T) {
 	if c != nil {
 		t.Fatal("offered unsupported Windows architecture")
 	}
-	for _, raw := range []string{"http://github.com/file", "https://github.com:8443/file", "https://github.com.evil.test/file", "https://user:secret@github.com/file", "https://127.0.0.1/file"} {
+	for _, raw := range []string{"http://github.com/file", "https://github.com:9443/file", "https://github.com.evil.test/file", "https://user:secret@github.com/file", "https://127.0.0.1/file"} {
 		u, _ := url.Parse(raw)
 		if allowedDownload(u) {
 			t.Fatalf("trusted %s", raw)

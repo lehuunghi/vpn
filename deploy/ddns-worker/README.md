@@ -70,6 +70,9 @@ thử thực tế bằng VPN20 và mạng 4G/5G.
 - **dns_api_unavailable**: kết nối Worker → Cloudflare lỗi/timeout; thử lại.
 
 API trung tâm vẫn là https://ddns.20.com.vn (443). Trang quản trị VPN20 dùng
-https://ten.vpn.20.com.vn:8443, cần NAT/firewall TCP 8443 riêng. DNS-01 không
+https://ten.vpn.20.com.vn:51821, dùng chung cổng quản trị TCP 51821. DNS-01 không
 cần mở cổng vào 80/443. Không đặt Cloudflare Access/trang challenge tương tác
 trước API nếu chưa có chính sách cho phép máy VPN gọi trực tiếp.
+
+VPN20 1.2.2 dùng DNS-over-HTTPS để kiểm tra TXT và không dò SOA/NS trên máy VPN.
+API Worker không đổi; bản 0.2.1 đang chạy giữ nguyên, không cần Deploy lại.
