@@ -1,0 +1,96 @@
+name: Standalone relay
+on:
+  push:
+    paths: ['deploy/relay/**', '.github/workflows/relay-installer.yml']
+  pull_request:
+    paths: ['deploy/relay/**', '.github/workflows/relay-installer.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: relay-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Static checks and pinned helper
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y shellcheck
+          bash -n deploy/relay/install.sh deploy/relay/tests/smoke-install.sh
+          shellcheck deploy/relay/install.sh deploy/relay/tests/smoke-install.sh
+          python3 - <<'PY'
+          import hashlib,importlib.util,pathlib,re,tempfile,subprocess
+          root=pathlib.Path("deploy/relay")
+          body=(root/"relay.py").read_bytes()
+          installer=(root/"install.sh").read_text()
+          assert re.search(r"^helper_hash=(\w+)$",installer,re.M)[1]==hashlib.sha256(body).hexdigest()
+          assert re.search(r"^helper_blob=(\w+)$",installer,re.M)[1]==hashlib.sha1(b"blob "+str(len(body)).encode()+b"\0"+body).hexdigest()
+          spec=importlib.util.spec_from_file_location("relay",root/"relay.py")
+          m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+          with tempfile.TemporaryDirectory() as tmp:
+              p=pathlib.Path(tmp,"install-client.sh");p.write_text(m.LINUX_INSTALL.replace("@NAME@","fixture"))
+              subprocess.run(["shellcheck",str(p)],check=True)
+          PY
+      - name: Download and verify official frp
+        run: |
+          mkdir -p /tmp/frp-relay-ci
+          curl --fail --location --silent --show-error --retry 3 https://github.com/fatedier/frp/releases/download/v0.71.1/frp_0.71.1_linux_amd64.tar.gz -o /tmp/frp-relay-ci/frp.tar.gz
+          echo '1d9875210972a5d1a62b2dc4c48df45ab0af05d3ca1b5e494a014428259df803  /tmp/frp-relay-ci/frp.tar.gz' | sha256sum -c -
+          tar -xzf /tmp/frp-relay-ci/frp.tar.gz -C /tmp/frp-relay-ci
+      - name: Real multi-profile TLS and UDP integration
+        env:
+          FRP_BIN_DIR: /tmp/frp-relay-ci/frp_0.71.1_linux_amd64
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python3 -m unittest discover -s deploy/relay/tests -v
+      - name: Actual systemd installation, repeat installation and rollback
+        run: |
+          sudo env "PATH=$PATH" GITHUB_ACTIONS=true FRP_ARCHIVE=/tmp/frp-relay-ci/frp.tar.gz FRPC=/tmp/frp-relay-ci/frp_0.71.1_linux_amd64/frpc bash deploy/relay/tests/smoke-install.sh
+      - name: Export disposable client fixture for Windows checks
+        if: matrix.os == 'ubuntu-24.04'
+        run: |
+          sudo cp /etc/vpn20-relay/clients/office/vpn20-relay-office.zip /tmp/relay-client-fixture.zip
+          sudo chmod 644 /tmp/relay-client-fixture.zip
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: matrix.os == 'ubuntu-24.04'
+        with:
+          name: disposable-relay-client-fixture
+          path: /tmp/relay-client-fixture.zip
+          retention-days: 1
+      - name: Diagnostics
+        if: failure()
+        run: |
+          sudo systemctl status vpn20-relay.service --no-pager || true
+          sudo journalctl -u vpn20-relay.service -n 60 --no-pager || true
+  windows-client:
+    needs: linux
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: disposable-relay-client-fixture
+          path: fixture
+      - name: Verify actual Windows client installation and persistence
+        shell: pwsh
+        run: |
+          Expand-Archive fixture/relay-client-fixture.zip fixture/profile
+          & ./fixture/profile/Install-Client.ps1
+          Start-Sleep -Seconds 5
+          $task = Get-ScheduledTask -TaskName VPN20-Relay-office
+          if ($task.State -ne 'Running') { throw 'Client startup task is not running' }
+          $exe = "$env:ProgramData\VPN20-Relay\office\frpc.exe"
+          if (-not (Get-Process frpc -ErrorAction SilentlyContinue | Where-Object Path -eq $exe)) { throw 'Native client is not running' }
+          Stop-ScheduledTask -TaskName VPN20-Relay-office
+          & ./fixture/profile/Install-Client.ps1
+          Start-Sleep -Seconds 3
+          if ((Get-ScheduledTask -TaskName VPN20-Relay-office).State -ne 'Running') { throw 'Reinstallation did not restart client' }
+          Stop-ScheduledTask -TaskName VPN20-Relay-office
+          Unregister-ScheduledTask -TaskName VPN20-Relay-office -Confirm:$false
