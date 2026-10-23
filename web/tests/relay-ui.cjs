@@ -1,108 +1,108 @@
-// Runs against a disposable mock VPN20 with a genuine standalone relay ZIP.
+// Password enrollment against the real VPS TLS frontend and native frps.
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { spawn, execFileSync } = require("node:child_process");
+const dgram = require("node:dgram");
+const { randomBytes } = require("node:crypto");
+const { spawn } = require("node:child_process");
 const { once } = require("node:events");
 const { chromium } = require("playwright");
+const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 async function main() {
-  const binary = process.env.VPN20_UI_BINARY;
-  assert(binary, "Set VPN20_UI_BINARY to the native VPN20 executable");
+  assert(process.env.VPN20_UI_BINARY && process.env.VPN20_FRPS_BINARY, "Set both native fixture binaries");
   const work = fs.mkdtempSync(path.join(os.tmpdir(), "vpn20-relay-ui-"));
   const root = path.resolve(__dirname, "../..");
-  let server;
-  let browser;
+  let server, vps, browser;
+  async function stop(child) {
+    if (child && child.exitCode === null) { const exited=once(child,"exit"); child.kill("SIGTERM"); await exited; }
+  }
   try {
-    execFileSync("python3", ["-c", `
-import importlib.util,pathlib,sys
-root=pathlib.Path(sys.argv[1]);work=pathlib.Path(sys.argv[2])
-spec=importlib.util.spec_from_file_location("fixtures",root/"deploy/relay/tests/test_relay.py")
-fixtures=importlib.util.module_from_spec(spec);spec.loader.exec_module(fixtures);fixtures.certificate(work)
-spec=importlib.util.spec_from_file_location("relay",root/"deploy/relay/relay.py")
-m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
-manager=m.Manager(work/"vps");manager.init("relay.example.test",443,20001,20100,18921,"1MB")
-(manager.root/"ca.pem").write_bytes((work/"ca.pem").read_bytes());manager.add("office")
-`, root, work], { stdio: "pipe" });
-    server = spawn(binary, [], { stdio: "ignore", env: {
-      ...process.env,
-      VPN20_DATA_DIR: path.join(work,"app"),
-      VPN20_HTTP_LISTEN: "127.0.0.1:52621",
-      VPN20_BACKEND: "mock", VPN20_ENDPOINT: "direct.example.test",
-      VPN20_MANAGE_SYSCTL: "false", VPN20_MANAGE_FIREWALL: "false", VPN20_UPDATE_MODE: "disabled",
+    vps=spawn("python3",[path.join(root,"deploy/relay/tests/ui_fixture.py"),work,process.env.VPN20_FRPS_BINARY],{stdio:"ignore"});
+    for(let i=0;i<200 && !fs.existsSync(path.join(work,"ready.json"));i++) await pause(100);
+    assert(fs.existsSync(path.join(work,"ready.json")),"VPS fixture failed to start");
+    const fixture=JSON.parse(fs.readFileSync(path.join(work,"ready.json"),"utf8"));
+    const start=()=>spawn(process.env.VPN20_UI_BINARY,[],{stdio:"ignore",env:{...process.env,
+      SSL_CERT_FILE:path.join(work,"ca.pem"),VPN20_DATA_DIR:path.join(work,"app"),
+      VPN20_HTTP_LISTEN:"127.0.0.1:52621",VPN20_PORT:String(fixture.local),
+      VPN20_BACKEND:"mock",VPN20_ENDPOINT:"direct.example.test",
+      VPN20_MANAGE_SYSCTL:"false",VPN20_MANAGE_FIREWALL:"false",VPN20_UPDATE_MODE:"disabled",
     }});
-    browser = await chromium.launch({ headless: true });
-    const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-    const url = "http://127.0.0.1:52621";
-    let ready = false;
-    for (let i=0; i<100; i++) {
-      try {
-        const response = await context.request.get(url+"/api/health", { timeout: 1000 });
-        if (response.ok()) { ready=true; break; }
-      } catch {}
-      await new Promise(resolve=>setTimeout(resolve,100));
+    server=start();
+    browser=await chromium.launch({headless:true});
+    const context=await browser.newContext({viewport:{width:1280,height:900}});
+    const url="http://127.0.0.1:52621";
+    async function ready() {
+      for(let i=0;i<150;i++) {
+        try { if((await context.request.get(url+"/api/health",{timeout:1000})).ok()) return; } catch {}
+        await pause(100);
+      }
+      throw Error("Disposable VPN20 did not start");
     }
-    assert(ready,"Disposable VPN20 did not start");
-    const setup = await context.request.post(url+"/api/setup",{data:{
-      username:"admin",password:"local-ui-fixture-password",endpointHost:"direct.example.test",
-    }});
-    assert.equal(setup.status(),201,"Setup failed");
-    const page = await context.newPage();
-    const jsErrors=[];
-    page.on("pageerror", error=>jsErrors.push(error.message));
+    async function connected() {
+      for(let i=0;i<200;i++) {
+        const s=await (await context.request.get(url+"/api/relay")).json();
+        if(s.phase==="connected") return s;
+        await pause(100);
+      }
+      throw Error("Embedded client did not connect to real VPS");
+    }
+    async function exchange(port) {
+      const sock=dgram.createSocket("udp4");
+      try {
+        for(const size of [32,148,1452]) {
+          const payload=randomBytes(size);
+          const message=Promise.race([once(sock,"message"),pause(5000).then(()=>{throw Error("Relay UDP timeout");})]);
+          sock.send(payload,port,"127.0.0.1");
+          const [reply]=await message;
+          assert.deepEqual(reply,payload,"Real embedded relay changed UDP payload");
+        }
+      } finally { sock.close(); }
+    }
+    await ready();
+    assert.equal((await context.request.post(url+"/api/setup",{data:{username:"admin",password:"local-ui-fixture-password",endpointHost:"direct.example.test"}})).status(),201);
+    const page=await context.newPage();
+    const jsErrors=[];page.on("pageerror",error=>jsErrors.push(error.message));
     await page.goto(url+"/settings");
-    const card = page.locator("form.card").filter({has:page.getByRole("heading",{name:"Server relay",exact:true})});
-    const toggle = card.getByRole("checkbox");
-    await toggle.check();
-    await card.getByLabel("Domain relay",{exact:true}).fill("relay.example.test");
+    const card=page.locator("form.card").filter({has:page.getByRole("heading",{name:"Server relay",exact:true})});
+    assert.equal(await card.locator('input[type="file"]').count(),0,"Obsolete ZIP upload remains");
+    const toggle=card.getByRole("checkbox");await toggle.check();
+    await card.getByLabel("Domain relay",{exact:true}).fill("relay.example.test:"+fixture.control);
+    const password=card.getByLabel("Mật khẩu relay",{exact:true});
     const save=card.getByRole("button",{name:"Cập nhật relay",exact:true});
     async function apply(expected) {
-      const result=page.waitForResponse(r=>r.url()===url+"/api/relay" && r.request().method()==="PUT");
-      await save.click();
-      assert.equal((await result).status(),expected,"Relay save response");
+      const response=page.waitForResponse(r=>r.url()===url+"/api/relay" && r.request().method()==="PUT");
+      await save.click();assert.equal((await response).status(),expected);
     }
-    await apply(400); // Domain alone cannot bypass profile credentials.
-    await card.getByText("Nhập ZIP profile do VPS cấp trước khi bật relay.",{exact:true}).waitFor();
-    await card.getByLabel("ZIP profile relay",{exact:true}).setInputFiles(path.join(work,"vps/clients/office/vpn20-relay-office.zip"));
-    await apply(202);
-    await card.getByText("relay.example.test:20001",{exact:true}).waitFor();
-    const status=await (await context.request.get(url+"/api/relay")).json();
-    assert.equal(status.enabled,true);
+    await apply(400);
+    await password.fill("wrong-enrollment-password");await apply(400);
+    await password.fill("browser-relay-fixture-password");await apply(202);
+    assert.equal(await password.inputValue(),"","Password was retained in the form");
+    const status=await connected();await exchange(status.remotePort);
     assert.equal(status.domain,"relay.example.test");
-    assert.equal(status.remotePort,20001);
     const overview=await (await context.request.get(url+"/api/status")).json();
-    assert.equal(overview.clientEndpoint,"relay.example.test:20001","Dashboard endpoint mismatch");
-    for(const field of ["accessKey","token","ca","profileZip"]) assert(!(field in status),"Private data in status");
-    const peerResponse=await context.request.post(url+"/api/peers",{data:{
-      name:"UI relay device",clientRoutes:"10.8.0.0/24",dns:"",keepalive:null,mtu:null,expiresAt:null,
-    }});
-    assert.equal(peerResponse.status(),201);
-    const peer=await peerResponse.json();
-    const config=await (await context.request.get(url+"/api/peers/"+peer.id+"/config")).text();
-    assert(config.includes("Endpoint = relay.example.test:20001"),"Downloaded config used a direct endpoint");
-    await page.reload();
-    await card.getByText("relay.example.test:20001",{exact:true}).waitFor();
-    assert.equal(await toggle.isChecked(),true,"Reload lost enabled state");
-    await page.setViewportSize({width:390,height:844});
-    await card.scrollIntoViewIfNeeded();
-    const box=await card.boundingBox();
-    assert(box && box.x>=0 && box.x+box.width<=391,"Relay card overflows mobile viewport");
+    assert.equal(overview.clientEndpoint,status.endpoint);
+    for(const key of ["password","accessKey","token","ca","profileZip"]) assert(!(key in status));
+    const peerResponse=await context.request.post(url+"/api/peers",{data:{name:"Password relay device",clientRoutes:"10.8.0.0/24",dns:"",keepalive:null,mtu:null,expiresAt:null}});
+    assert.equal(peerResponse.status(),201);const peer=await peerResponse.json();
+    const config=()=>context.request.get(url+"/api/peers/"+peer.id+"/config").then(r=>r.text());
+    assert((await config()).includes("Endpoint = "+status.endpoint));
+    await stop(server);server=start();await ready();
+    const resumed=await connected();assert.equal(resumed.endpoint,status.endpoint);await exchange(status.remotePort);
+    await page.reload();await card.getByText(status.endpoint,{exact:true}).waitFor();
+    assert.equal(await toggle.isChecked(),true);assert.equal(await password.inputValue(),"");
+    await page.setViewportSize({width:390,height:844});await card.scrollIntoViewIfNeeded();
+    const box=await card.boundingBox();assert(box && box.x>=0 && box.x+box.width<=391);
     if(process.env.VPN20_UI_SCREENSHOT) await card.screenshot({path:process.env.VPN20_UI_SCREENSHOT});
-    await toggle.uncheck();
-    await apply(202);
-    const direct=await (await context.request.get(url+"/api/peers/"+peer.id+"/config")).text();
-    assert(direct.includes("Endpoint = direct.example.test:51820"),"Disable did not restore direct endpoint");
-    assert.deepEqual(jsErrors,[],"Browser runtime errors");
-    console.log("Browser relay enable/import/reload/export/disable and mobile layout PASS");
+    await toggle.uncheck();await apply(202);
+    assert((await config()).includes("Endpoint = direct.example.test:"+fixture.local));
+    await toggle.check();await apply(202);await connected();await exchange(status.remotePort);
+    assert.deepEqual(jsErrors,[]);
+    console.log("Password enrollment, verified TLS, real embedded UDP, restart, export, disable/re-enable and mobile layout PASS");
   } finally {
     if(browser) await browser.close();
-    if(server && server.exitCode===null) {
-      const exited=once(server,"exit");
-      server.kill("SIGTERM");
-      await exited;
-    }
-    fs.rmSync(work,{recursive:true,force:true});
+    await stop(server);await stop(vps);fs.rmSync(work,{recursive:true,force:true});
   }
 }
-main().catch(error=>{ console.error(error); process.exitCode=1; });
+main().catch(error=>{console.error(error);process.exitCode=1;});

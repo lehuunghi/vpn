@@ -1,21 +1,18 @@
-# VPN20 Relay 1.0.0 — bộ cài riêng cho VPS
+# VPN20 Relay 1.1.0 — domain và mật khẩu
 
-Một lệnh cài frps, SSL, gia hạn, systemd, firewall đang hoạt động và profile
-client có phân quyền. Không cài VPN20 lên VPS; cổng quản trị VPN20 vẫn là 51821.
+Cài relay lên VPS, đặt domain và mật khẩu. Trong VPN20 **1.4.0 trở lên**, mở
+**Cài đặt → Server relay**, nhập hai thông tin này rồi bấm **Cập nhật relay**.
+Không tải ZIP, không chép khóa hay cài frpc riêng trên máy VPN20.
 
-VPS: Ubuntu 22.04/24.04/26.04 hoặc Debian 12/13, amd64/arm64, systemd.
-Profile có bộ cài client Windows x64 và Ubuntu/Debian amd64/arm64; không có Windows ARM64.
+## Chuẩn bị VPS
 
-## Chuẩn bị
+- Ubuntu 22.04/24.04/26.04 hoặc Debian 12/13, amd64/arm64, có systemd.
+- Trỏ bản ghi **A** của domain, ví dụ **relay.20.com.vn**, về IPv4 public VPS.
+  Chọn **DNS only**, không bật proxy Cloudflare; không tạo AAAA cho relay này.
+- Security group của nhà cung cấp cho phép **TCP 80**, **TCP 443**, **UDP 20001–20100**.
+- TCP 80 và 443 chưa được dịch vụ khác dùng. Bộ cài không dừng webserver hiện có.
 
-1. Cloudflare: tạo A **relay.20.com.vn** → IPv4 public VPS, **DNS only**.
-   Bộ relay này nghe IPv4; không tạo AAAA cho hostname relay.
-2. Security group của nhà cung cấp cho phép TCP **80**, **443** và UDP
-   **20001–20100**. Giữ quyền SSH hiện có.
-3. TCP 80 và 443 trên VPS chưa được dịch vụ khác dùng. Bộ cài không dừng
-   nginx/Caddy; xem cách dùng chứng chỉ/cổng khác bên dưới.
-
-## Một lệnh
+## Cài đặt bằng một lệnh
 
 Thay domain cuối lệnh bằng domain của bạn:
 
@@ -23,165 +20,74 @@ Thay domain cuối lệnh bằng domain của bạn:
 sudo bash -c 'set -e; f="$(mktemp)"; trap '\''rm -f "$f"'\'' EXIT; curl -fsSL --proto "=https" --proto-redir "=https" https://raw.githubusercontent.com/lehuunghi/vpn/main/deploy/relay/install.sh -o "$f"; bash "$f" --domain "$1"' -- relay.20.com.vn
 ~~~
 
-Nếu VPS chưa có curl, cài trước bằng **sudo apt-get update && sudo apt-get install -y curl**.
-Bộ cài mặc định đăng ký Let's Encrypt không email và chấp nhận điều khoản ACME
-cho thao tác cấp chứng chỉ. Có thể thêm email khi chạy file cục bộ.
-Không cần cung cấp API token Cloudflare cho VPS.
+Sau domain, bộ cài hỏi **Mật khẩu relay** và **Nhập lại mật khẩu relay**.
+Mật khẩu dài **12–256 ký tự**, nhập ẩn; không đặt mật khẩu vào câu lệnh.
+Nếu VPS thiếu curl: **sudo apt-get update && sudo apt-get install -y curl**.
 
-Bộ cài tự:
+Bộ cài kiểm tra SHA-256 của frps và mã quản lý, tự cấp/gia hạn Let's Encrypt,
+cấu hình dịch vụ tự khởi động và mở rule trong UFW/firewalld nếu đang hoạt động.
+Security group của nhà cung cấp vẫn cần mở như trên. Giữ TCP 80 để gia hạn SSL.
+Cấp chứng chỉ mặc định chấp nhận điều khoản ACME, không yêu cầu email.
 
-- Tải frps **0.71.1** chính thức theo kiến trúc, kiểm tra SHA-256.
-- Tải bộ quản lý theo Git blob bất biến và kiểm tra SHA-256 trước khi chạy.
-- Cấp fullchain Let's Encrypt qua HTTP-01; kiểm tra hostname, CA, thời hạn và khóa.
-- Chạy dịch vụ **vpn20-relay** bằng tài khoản hệ thống riêng.
-- Tự chạy cùng VPS, khởi động lại khi lỗi, đồng bộ TLS qua deploy hook và timer.
-- Thêm rule UFW/firewalld nếu chúng đang hoạt động; không tự bật/tắt firewall
-  hoặc thay đổi SSH. Security group của nhà cung cấp vẫn cần mở như trên.
-- Tạo profile **office** và cấp một cổng UDP trong dải.
-- Kiểm tra TLS tại listener; khôi phục cấu hình/dịch vụ cũ nếu kích hoạt thất bại.
+## Kết nối từ VPN20
 
-## Kết nối máy VPN20
+1. Nâng ứng dụng VPN20 lên **1.4.0** hoặc mới hơn.
+2. Vào **Cài đặt → Server relay**, bật **Dùng server relay**.
+3. Nhập **Domain relay** và **Mật khẩu relay** vừa đặt trên VPS.
+4. Bấm **Cập nhật relay**, chờ **Đã kết nối relay**.
+5. Tải lại `.conf` hoặc quét lại QR trên các thiết bị WireGuard đã cấu hình trước đó.
 
-ZIP đầu tiên:
+VPS tự cấp khóa riêng và cổng UDP riêng cho mỗi máy VPN20. Các thiết bị WireGuard
+của cùng máy VPN20 dùng chung cổng được cấp. Không cần NAT UDP 51820 trên router.
+Đăng ký lại từ cùng dữ liệu VPN20 giữ nguyên khóa/cổng, kể cả khi phản hồi trước
+bị mất. Sau khi đăng ký thành công, VPN20 lưu khóa riêng và **không lưu mật khẩu**.
+Khởi động lại hoặc bật/tắt relay không cần nhập lại mật khẩu.
 
-~~~
-/etc/vpn20-relay/clients/office/vpn20-relay-office.zip
-~~~
+Tệp `.conf`, QR và Dashboard dùng đúng Endpoint relay; DDNS không ghi đè nó.
+Trang quản trị VPN20 vẫn dùng cổng hiện có, mặc định **51821**. Relay chuyển UDP
+WireGuard; public trang quản trị cần đường HTTPS riêng.
 
-Dùng SCP/WinSCP tải ZIP riêng về máy cài VPN20, giải nén và giữ các tệp cùng
-thư mục. ZIP có khóa profile; chỉ gửi cho chủ máy này, không công khai ZIP.
-
-**VPN20 1.3.0 trở lên:** mở **Cài đặt → Server relay**, bật **Dùng server relay**,
-nhập domain VPS, chọn ZIP trên và bấm **Cập nhật relay**. Không cần giải nén hay
-chạy script client riêng. Có thể để trống domain khi nhập ZIP để tự lấy domain.
-Ứng dụng tự dùng cổng điều phối, cổng UDP và khóa riêng từ profile; luôn xác minh
-CA/hostname SSL và nối về cổng UDP thực tế của VPN20.
-
-Chờ **Đã kết nối relay**, tải lại .conf hoặc quét lại QR trên các thiết bị.
-Endpoint relay được điền tự động. DDNS thay đổi hostname quản trị không ghi đè
-Endpoint relay. Cấu hình và khóa giữ qua nâng cấp/khởi động lại. Khi tắt relay,
-ứng dụng xuất lại điểm kết nối trực tiếp đã lưu.
-
-Nếu đang chạy client độc lập bằng cùng profile, dừng nó trước khi chuyển vào
-VPN20. Ví dụ profile **office**:
-
-~~~powershell
-Stop-ScheduledTask -TaskName VPN20-Relay-office
-Disable-ScheduledTask -TaskName VPN20-Relay-office
-~~~
+## Quản lý trên VPS
 
 ~~~bash
-sudo systemctl disable --now vpn20-relay-client-office.service
-~~~
-
-Các lệnh Windows chạy trong PowerShell Administrator; Linux dùng sudo. Chỉ
-dừng client của profile đang chuyển, giữ dịch vụ relay trên VPS hoạt động.
-
-### Client độc lập cho VPN20 cũ
-
-Windows x64: mở PowerShell Administrator tại thư mục giải nén:
-
-~~~powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Install-Client.ps1
-~~~
-
-Linux:
-
-~~~bash
-sudo bash ./install-client.sh
-~~~
-
-Bộ cài client tự tải frpc cùng phiên bản, kiểm tra SHA-256, cài cấu hình xác minh
-CA/hostname và chạy cùng máy. Windows dùng Scheduled Task SYSTEM; Linux dùng
-systemd. Không có bước tắt xác minh TLS.
-
-Trong bản .conf thử nghiệm của điện thoại, đổi:
-
-~~~ini
-Endpoint = relay.20.com.vn:20001
-~~~
-
-Giữ khóa, DNS và AllowedIPs. Cổng thực tế có trong README của ZIP.
-Mỗi máy chủ VPN20 được cấp một cổng; nhiều thiết bị của máy đó cùng dùng cổng này.
-Máy VPN20 chủ động kết nối ra VPS, không cần chuyển tiếp UDP 51820 trên router.
-
-Với VPN20 trước 1.3.0, cấu hình tải lại từ app có thể dùng Endpoint DDNS cũ;
-hãy giữ/sửa Endpoint relay trong cấu hình thiết bị hoặc nâng cấp ứng dụng.
-Relay này chỉ chuyển UDP WireGuard. Muốn public trang quản trị cần đường TCP/HTTPS
-riêng; máy VPN20 vẫn giữ cổng quản trị hiện có, mặc định 51821.
-
-Relay dùng TLS/TCP giữa máy VPN20 và VPS để chở gói WireGuard UDP. Khi đường
-truyền mất gói, hiệu năng/độ trễ có thể kém kết nối UDP trực tiếp. Không tự xuyên
-NAT bằng STUN hoặc chuyển đường trực tiếp; đây là đường relay đã chọn.
-
-## Thêm, xuất lại và thu hồi profile
-
-~~~bash
-sudo vpn20-relay add vanphong2
-sudo vpn20-relay add vanphong3 --port 20003 --local-port 51820 --limit 512KB
 sudo vpn20-relay list
-sudo vpn20-relay export vanphong2
-sudo vpn20-relay revoke vanphong2
-sudo vpn20-relay enable vanphong2
+sudo vpn20-relay password
+sudo vpn20-relay revoke vpn20-TENMAY
+sudo vpn20-relay enable vpn20-TENMAY
+sudo journalctl -u vpn20-relay.service -n 50 --no-pager
 ~~~
 
-Lệnh add in đường dẫn ZIP. Mỗi profile có khóa đăng nhập riêng và chỉ được mở
-đúng cổng UDP đã cấp. Cổng bị thu hồi được giữ để không vô tình chuyển lưu lượng
-cũ sang người khác. Thu hồi có hiệu lực ở heartbeat kế tiếp, khoảng 10–30 giây.
-Một profile dùng cho một máy VPN20.
+Lấy tên máy thực tế từ `list`. `password` hỏi ẩn mật khẩu mới và xác nhận lại.
+Đổi mật khẩu chặn đăng ký bằng mật khẩu cũ; máy đã đăng ký vẫn dùng khóa riêng.
+Muốn ngắt một máy, dùng `revoke`; quyền được kiểm tra lại trong khoảng 10–30 giây.
+Cổng của máy bị thu hồi được giữ lại, tránh cấp nhầm Endpoint cũ cho máy khác.
 
-Giới hạn mặc định **1MB/s cho cả máy VPN20**, khoảng 8 Mbps; **512KB** khoảng
-4 Mbps; **0** không giới hạn. Chính sách áp ở VPS; client không tự tăng giới hạn
-hoặc đổi cổng/protocol. Plugin chỉ nghe loopback, không có API đăng ký công khai.
-Khóa vận chuyển frp trong profile không tự cấp quyền mở cổng: plugin còn kiểm tra
-khóa riêng của profile và cấp session ID ngẫu nhiên. Khóa WireGuard ở VPN20/thiết
-bị; VPS chuyển tiếp gói WireGuard còn mã hóa.
+Mật khẩu trên VPS được băm PBKDF2 với salt riêng; có giới hạn đăng ký theo IP
+và toàn VPS. SSL luôn được xác minh trước khi gửi mật khẩu. TCP 443 phục vụ cả
+đăng ký HTTPS và kết nối relay; các cổng nội bộ 18921/18922 chỉ nghe loopback.
 
-## Cổng và chứng chỉ tùy chỉnh
+## Nâng cấp relay đang có
 
-~~~bash
-curl -fsSL https://raw.githubusercontent.com/lehuunghi/vpn/main/deploy/relay/install.sh -o install-relay.sh
-sudo bash install-relay.sh --help
-sudo bash install-relay.sh --domain relay.example.com --control-port 7000 --udp-start 21000 --udp-end 21049 --limit 1MB --client office --email admin@example.com
-~~~
+Chạy lại lệnh cài đặt trên. Khi nâng từ relay **1.0.0**, bộ cài hỏi mật khẩu để
+bật đăng ký mới. Khóa, cổng đã cấp và kết nối VPN20 1.3.0 được giữ nguyên;
+không cần đăng ký lại các máy đang kết nối tốt. Chạy lại sau đó giữ mật khẩu.
+Nếu kích hoạt dịch vụ mới thất bại, bộ cài khôi phục cấu hình/dịch vụ trước đó.
 
-Nếu VPS đã có nginx/Caddy quản lý SSL, dùng cổng điều phối còn trống và đường dẫn
-fullchain/khóa trên VPS:
+Giữ cả **/etc/vpn20-relay** và **/var/lib/vpn20-relay** khi sao lưu/di chuyển VPS.
+Không xóa dữ liệu VPN20 nếu muốn đăng ký lại mà giữ đúng khóa/cổng đã cấp.
 
-~~~bash
-sudo bash install-relay.sh --domain relay.example.com --control-port 7000 --cert-file /etc/letsencrypt/live/relay.example.com/fullchain.pem --key-file /etc/letsencrypt/live/relay.example.com/privkey.pem
-~~~
+## Cài tự động hoặc dùng chứng chỉ có sẵn
 
-Giữ đường dẫn nguồn ổn định; bộ đồng bộ kiểm tra mỗi giờ. Có thể gọi ngay sau
-khi webserver gia hạn: **sudo vpn20-relay sync-tls**. Chứng chỉ không hợp lệ
-không thay thế chứng chỉ đang phục vụ. Với CA nội bộ, cung cấp **--ca-file** rõ ràng.
+Tải `install.sh`, rồi chạy `sudo bash install.sh --help` để xem tùy chọn.
+`--password-file /duong-dan/tep-rieng` đọc mật khẩu từ tệp riêng khi không có
+terminal. Không truyền mật khẩu trực tiếp trên dòng lệnh.
 
-## Cài lại, đổi VPS và vận hành
+Có thể dùng `--cert-file`, `--key-file` để dùng chứng chỉ do hệ thống hiện có
+quản lý. Chứng chỉ cần được máy VPN20 tin cậy qua CA hệ thống; không bỏ xác minh
+SSL hay tải CA từ một kết nối chưa được tin cậy. Chứng chỉ nguồn được đồng bộ
+qua timer và lệnh `sudo vpn20-relay sync-tls`.
 
-Chạy lại giữ domain/cổng/khóa/profile; restart ngắn để áp dụng cấu hình.
-Dải mới phải chứa tất cả cổng đã cấp. Đổi domain thì xuất lại ZIP.
-Sao lưu riêng toàn bộ **/etc/vpn20-relay** (có khóa, cần quyền bảo vệ), cùng dữ liệu
-Let's Encrypt nếu cần giữ tài khoản ACME. Đổi VPS giữ domain, khóa và cổng; cập
-nhật DNS rồi kết nối lại client. WireGuard có thể cần tắt/bật tunnel để phân giải
-IP mới. Đây không phải chuyển VPS không gián đoạn.
-
-~~~bash
-sudo systemctl status vpn20-relay --no-pager
-sudo journalctl -u vpn20-relay -n 100 --no-pager
-sudo systemctl list-timers vpn20-relay-tls.timer certbot.timer
-sudo certbot renew --cert-name relay.20.com.vn --dry-run
-~~~
-
-Cổng TCP có listener ngay. Cổng UDP chỉ có listener sau khi frpc đăng ký thành
-công. Kiểm tra bằng WireGuard/handshake; cổng frp không phải website HTTP.
-
-## Kiểm thử phát triển
-
-Bash syntax, ShellCheck và **python3 -m unittest discover -s deploy/relay/tests -v**.
-Đặt FRP_BIN_DIR tới thư mục frps/frpc 0.71.1 để chạy TLS/UDP thật: nhiều profile,
-nhiều client đồng thời, gói 32/148/1452 byte, sai khóa/hostname, chiếm cổng, thu
-hồi quyền và backend chính sách lỗi.
-
-CI cài systemd thực tế trên Ubuntu 22.04/24.04, cài lại, kiểm tra giữ identity,
-xung đột và rollback; sau đó cài client Windows x64 thực tế. Chứng chỉ fixture
-chỉ dùng kiểm thử, không phát hành làm SSL public.
+Nếu chọn `--control-port` khác 443, nhập `domain:cổng` trong VPN20 và mở cổng đó
+trên firewall/security group. Giới hạn mặc định là **1 MB/giây cho mỗi máy VPN20**;
+`--limit 0` bỏ giới hạn, `--udp-start`/`--udp-end` đổi dải cổng mà không loại bỏ
+các cổng đã cấp. Bộ cài không tự bật/tắt firewall hoặc thay đổi SSH.

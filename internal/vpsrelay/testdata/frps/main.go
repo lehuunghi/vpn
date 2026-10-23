@@ -3,13 +3,12 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
 	"os/signal"
 
-	v1 "github.com/fatedier/frp/pkg/config/v1"
+	"github.com/fatedier/frp/pkg/config"
 	"github.com/fatedier/frp/server"
 )
 
@@ -23,16 +22,12 @@ func main() {
 }
 
 func run(path string) error {
-	body, err := os.ReadFile(path)
+	cfg, _, err := config.LoadServerConfig(path, true)
 	if err != nil {
 		return err
 	}
-	var cfg v1.ServerConfig
-	if err := json.Unmarshal(body, &cfg); err != nil {
-		return err
-	}
 	cfg.Complete()
-	s, err := server.NewService(&cfg)
+	s, err := server.NewService(cfg)
 	if err != nil {
 		return err
 	}

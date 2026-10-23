@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Verify the installed systemd service, not an in-process replacement."""
 import contextlib
+import http.client
 import json
 import os
 from pathlib import Path
 import socket
+import ssl
 import subprocess
 import tempfile
 import threading
@@ -31,16 +33,40 @@ worker = threading.Thread(target=loop, daemon=True)
 worker.start()
 client = None
 try:
-    archive = subprocess.check_output(
-        ["vpn20-relay", "add", "native-probe", "--local-port", str(echo.getsockname()[1])], text=True
-    ).strip()
-    folder = Path(archive).parent
-    config = folder/"probe.toml"
-    config.write_text((folder/"frpc.toml").read_text().replace(
-        'serverAddr = "relay.example.test"', 'serverAddr = "127.0.0.1"'))
-    env = {k: v for k, v in os.environ.items() if k.lower() not in ["http_proxy", "https_proxy", "all_proxy"]}
+    folder = Path(tempfile.mkdtemp(prefix="vpn20-enroll-probe-"))
     s = json.loads(Path("/etc/vpn20-relay/state.json").read_text())
-    target = s["clients"]["native-probe"]["port"]
+    ctx = ssl.create_default_context(cafile="/etc/vpn20-relay/ca.pem")
+    ctx.set_alpn_protocols(["http/1.1"])
+    request = http.client.HTTPConnection(s["domain"], s["control_port"], timeout=5)
+    raw = socket.create_connection(("127.0.0.1", s["control_port"]), timeout=5)
+    request.sock = ctx.wrap_socket(raw, server_hostname=s["domain"])
+    request.request("POST", "/api/v1/enroll", json.dumps({"password": "native-enrollment-fixture-password", "claim": "d"*64}), {"Content-Type": "application/json"})
+    response = request.getresponse()
+    assert response.status == 200, "Installed password enrollment failed"
+    profile = json.loads(response.read())
+    request.close()
+    config = folder/"probe.toml"
+    config.write_text(f'''serverAddr = "127.0.0.1"
+serverPort = {s["control_port"]}
+user = {json.dumps(profile["name"])}
+metadatas.access_key = {json.dumps(profile["accessKey"])}
+auth.method = "token"
+auth.token = {json.dumps(profile["token"])}
+auth.additionalScopes = ["HeartBeats", "NewWorkConns"]
+transport.tls.enable = true
+transport.tls.serverName = {json.dumps(s["domain"])}
+transport.tls.trustedCaFile = "/etc/vpn20-relay/ca.pem"
+transport.heartbeatInterval = 10
+transport.heartbeatTimeout = 30
+[[proxies]]
+name = "vpn20"
+type = "udp"
+localIP = "127.0.0.1"
+localPort = {echo.getsockname()[1]}
+remotePort = {profile["remotePort"]}
+''')
+    env = {k: v for k, v in os.environ.items() if k.lower() not in ["http_proxy", "https_proxy", "all_proxy"]}
+    target = profile["remotePort"]
     with tempfile.TemporaryFile(mode="w+") as log:
         client = subprocess.Popen([os.environ["FRPC"], "-c", str(config)], cwd=folder,
                                   stdout=log, stderr=subprocess.STDOUT, env=env)
@@ -68,3 +94,6 @@ finally:
     stop.set()
     echo.close()
     worker.join(timeout=1)
+    if "folder" in globals():
+        import shutil
+        shutil.rmtree(folder)

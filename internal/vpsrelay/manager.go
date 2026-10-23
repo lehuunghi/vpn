@@ -2,6 +2,7 @@ package vpsrelay
 
 import (
 	"context"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"io"
@@ -33,9 +34,10 @@ type Store interface {
 }
 
 type Options struct {
-	Store     Store
-	LocalPort int
-	dial      func(context.Context, string, string) (net.Conn, error)
+	Store       Store
+	LocalPort   int
+	dial        func(context.Context, string, string) (net.Conn, error)
+	enrollRoots *x509.CertPool
 }
 
 type savedState struct {
@@ -60,6 +62,7 @@ type Status struct {
 type Input struct {
 	Enabled    bool   `json:"enabled"`
 	Domain     string `json:"domain"`
+	Password   string `json:"password,omitempty"`
 	ProfileZIP []byte `json:"profileZip,omitempty"`
 }
 
@@ -98,7 +101,7 @@ func New(opts Options) *Manager {
 		}
 	}
 	if err != nil {
-		m.problem = "Không đọc được cấu hình relay; nhập lại profile hoặc khôi phục bản sao lưu."
+		m.problem = "Không đọc được cấu hình relay; nhập lại domain và mật khẩu hoặc khôi phục bản sao lưu."
 	}
 	return m
 }
@@ -124,6 +127,10 @@ func (m *Manager) Configure(ctx context.Context, input Input) (Status, error) {
 	m.mu.RLock()
 	next := m.state
 	m.mu.RUnlock()
+	enrollmentPort := 443
+	if next.Profile.ControlPort > 0 {
+		enrollmentPort = next.Profile.ControlPort
+	}
 	if len(input.ProfileZIP) > 0 {
 		p, err := parseProfile(input.ProfileZIP)
 		if err != nil {
@@ -135,15 +142,42 @@ func (m *Manager) Configure(ctx context.Context, input Input) (Status, error) {
 		}
 	}
 	if strings.TrimSpace(input.Domain) != "" {
-		host, err := Domain(input.Domain)
+		value := strings.TrimSpace(input.Domain)
+		if strings.Contains(value, ":") {
+			host, port, err := net.SplitHostPort(value)
+			if err != nil {
+				return Status{}, errors.New("Nhập domain relay hoặc domain:cổng, không kèm https://.")
+			}
+			n, err := strconv.Atoi(port)
+			if err != nil || n < 1 || n > 65535 {
+				return Status{}, errors.New("Cổng relay phải từ 1 đến 65535.")
+			}
+			value, enrollmentPort = host, n
+		} else if value != next.Domain {
+			enrollmentPort = 443
+		}
+		host, err := Domain(value)
 		if err != nil {
 			return Status{}, err
 		}
 		next.Domain = host
 	}
 	if input.Enabled {
+		if _, err := Domain(next.Domain); err != nil {
+			return Status{}, err
+		}
+		if input.Password != "" {
+			p, err := m.enroll(ctx, next.Domain, enrollmentPort, input.Password)
+			if err != nil {
+				return Status{}, err
+			}
+			next.Profile = p
+		}
 		if err := next.Profile.validate(); err != nil {
-			return Status{}, errors.New("Nhập ZIP profile do VPS cấp trước khi bật relay.")
+			return Status{}, errors.New("Nhập domain và mật khẩu đã đặt khi cài relay trên VPS.")
+		}
+		if next.Profile.SystemTrust && (next.Domain != next.Profile.Host || enrollmentPort != next.Profile.ControlPort) {
+			return Status{}, errors.New("Nhập mật khẩu để đăng ký với domain relay mới.")
 		}
 		if _, err := Domain(next.Domain); err != nil {
 			return Status{}, err
@@ -282,7 +316,7 @@ func safeError(err error) string {
 	}
 	switch {
 	case strings.Contains(text, "x509") || strings.Contains(text, "certificate") || strings.Contains(text, "tls"):
-		return "Chứng chỉ SSL của relay không hợp lệ; kiểm tra domain, thời gian hệ thống và profile CA."
+		return "Chứng chỉ SSL của relay không hợp lệ; kiểm tra domain, chứng chỉ trên VPS và thời gian hệ thống."
 	case strings.Contains(text, "lookup") || strings.Contains(text, "no such host"):
 		return "Không phân giải được domain relay; kiểm tra DNS và Internet."
 	case strings.Contains(text, "dial") || strings.Contains(text, "connect") || strings.Contains(text, "timeout"):

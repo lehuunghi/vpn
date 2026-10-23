@@ -33,8 +33,9 @@ Quản trị dịch vụ cần nâng Worker lên 0.2.1 một lần; xem
 Máy VPN20 sau NAT/CGNAT có thể dùng **[bộ cài relay riêng trên VPS](deploy/relay/README.md)**
 để kết nối WireGuard mà không mở UDP 51820 trên router. Bộ cài tự cấu hình TLS,
 dịch vụ và profile kết nối cho từng máy VPN20.
-Từ VPN20 **1.3.0**, vào **Cài đặt → Server relay**, bật **Dùng server relay**,
-nhập domain và chọn ZIP profile do VPS cấp. Client relay có sẵn trong bộ cài
+Từ VPN20 **1.4.0**, vào **Cài đặt → Server relay**, bật **Dùng server relay**,
+nhập domain và mật khẩu tự đặt khi cài relay VPS **1.1.0**. Không cần tải ZIP.
+Mỗi máy tự nhận khóa và cổng UDP riêng. Client relay có sẵn trong bộ cài
 Windows/Linux và Docker; tệp .conf và mã QR tự dùng Endpoint của relay.
 
 ## Cài trực tiếp trên Windows

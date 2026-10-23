@@ -66,6 +66,50 @@ class Profiles(unittest.TestCase):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 self.m.add(value)
 
+    def test_password_registration_retry_rotation_and_revocation(self):
+        password = "fixture-enrollment-password"
+        self.m.set_password(password)
+        self.assertNotIn(password, (self.root/"enrollment.json").read_text())
+        claim = secrets.token_hex(32)
+        first = self.m.register(password, claim)
+        self.assertEqual(first, self.m.register(password, claim))
+        self.assertNotEqual(first["accessKey"], first["token"])
+        second = self.m.register(password, secrets.token_hex(32))
+        self.assertNotEqual(first["remotePort"], second["remotePort"])
+        self.assertNotEqual(first["accessKey"], second["accessKey"])
+        policy = relay.Policy(self.m)
+        login = {"user": first["name"], "metas": {"access_key": first["accessKey"]}}
+        policy.authorize("Login", login.copy())
+        self.m.set_password("changed-registration-password")
+        with self.assertRaises(ValueError):
+            self.m.register(password, secrets.token_hex(32))
+        policy.authorize("Login", login.copy())  # Rotation affects enrollment only.
+        restored = relay.Manager(self.root)
+        self.assertEqual(first, restored.register("changed-registration-password", claim))
+        restored.enabled(first["name"], False)
+        with self.assertRaises(ValueError):
+            restored.register("changed-registration-password", claim)
+        with self.assertRaises(ValueError):
+            policy.authorize("Login", login)
+        self.assertEqual(len(self.m.clients()), 2)
+
+    def test_password_concurrent_allocation(self):
+        self.m.set_password("concurrent-registration-password")
+        claims = [secrets.token_hex(32) for _ in range(8)]
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+            rows = list(executor.map(lambda c: self.m.register("concurrent-registration-password", c), claims))
+        self.assertEqual(len({r["remotePort"] for r in rows}), 8)
+        self.assertEqual(len({r["accessKey"] for r in rows}), 8)
+
+    def test_enrollment_rate_limit(self):
+        limit = relay.EnrollmentLimit()
+        for _ in range(5):
+            self.assertTrue(limit.allow("192.0.2.1"))
+        self.assertFalse(limit.allow("192.0.2.1"))
+        for n in range(25):
+            self.assertTrue(limit.allow("198.51.100."+str(n)))
+        self.assertFalse(limit.allow("203.0.113.1"))
+
     def test_rerun_preserves_identity_ports_and_private_exports(self):
         archive = self.m.add("office")
         state = self.m.state()

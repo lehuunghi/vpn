@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """VPN20 standalone relay: profile management and loopback frps authorization."""
 import argparse
+import collections
 import contextlib
 import fcntl
 import grp
+import getpass
 import hashlib
 import hmac
 import http.server
@@ -13,8 +15,12 @@ import os
 from pathlib import Path
 import re
 import secrets
+import select
 import signal
 import socket
+import socketserver
+import sqlite3
+import ssl
 import subprocess
 import sys
 import tempfile
@@ -23,7 +29,7 @@ import time
 import urllib.parse
 import zipfile
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 FRP_VERSION = "0.71.1"
 FRP_HASHES = {
     "linux_amd64": "1d9875210972a5d1a62b2dc4c48df45ab0af05d3ca1b5e494a014428259df803",
@@ -100,6 +106,67 @@ class Manager:
     def __init__(self, root="/etc/vpn20-relay", gid=None):
         self.root = Path(root)
         self.gid = gid
+        self.registrations = Path("/var/lib/vpn20-relay") if str(self.root) == "/etc/vpn20-relay" else self.root / "registrations"
+
+    def database(self):
+        self.registrations.mkdir(parents=True, exist_ok=True, mode=0o700)
+        if str(self.root) == "/etc/vpn20-relay" and os.geteuid() == 0:
+            import pwd
+            owner = pwd.getpwnam("vpn20-relay")
+            os.chown(self.registrations, owner.pw_uid, owner.pw_gid)
+        db = sqlite3.connect(self.registrations / "clients.db", timeout=10)
+        os.chmod(self.registrations / "clients.db", 0o600)
+        if str(self.root) == "/etc/vpn20-relay" and os.geteuid() == 0:
+            os.chown(self.registrations / "clients.db", owner.pw_uid, owner.pw_gid)
+        db.execute("CREATE TABLE IF NOT EXISTS clients (name TEXT PRIMARY KEY, claim_hash TEXT UNIQUE, access_key TEXT, port INTEGER UNIQUE, bandwidth TEXT, enabled INTEGER NOT NULL)")
+        return db
+
+    def set_password(self, password):
+        if not isinstance(password, str) or not 12 <= len(password) <= 256:
+            raise ValueError("Mật khẩu relay cần từ 12 đến 256 ký tự")
+        salt = secrets.token_bytes(32)
+        digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, 600000)
+        atomic(self.root / "enrollment.json", json.dumps({"salt": salt.hex(), "hash": digest.hex()}), gid=self.gid)
+
+    def check_password(self, password):
+        if not isinstance(password, str) or not 12 <= len(password) <= 256:
+            return False
+        data = json.loads((self.root / "enrollment.json").read_text())
+        digest = hashlib.pbkdf2_hmac("sha256", password.encode(), bytes.fromhex(data["salt"]), 600000)
+        return hmac.compare_digest(digest.hex(), data["hash"])
+
+    def register(self, password, claim):
+        if not isinstance(claim, str) or not re.fullmatch(r"[0-9a-f]{64}", claim) or not self.check_password(password):
+            raise ValueError("unauthorized")
+        claim_hash = hashlib.sha256(claim.encode()).hexdigest()
+        name = "vpn20-" + claim_hash[:24]
+        with self.allocation_lock(), contextlib.closing(self.database()) as db, db:
+            s = self.state()
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT access_key,port,enabled FROM clients WHERE claim_hash=?", (claim_hash,)).fetchone()
+            if row:
+                access_key, assigned, enabled = row
+                if not enabled:
+                    raise ValueError("unauthorized")
+            else:
+                used = {c["port"] for c in s["clients"].values()}
+                used.update(r[0] for r in db.execute("SELECT port FROM clients"))
+                assigned = next((n for n in range(s["port_start"], s["port_end"] + 1) if n not in used), None)
+                if assigned is None:
+                    raise ValueError("capacity")
+                access_key = secrets.token_hex(32)
+                db.execute("INSERT INTO clients VALUES (?,?,?,?,?,1)", (name, claim_hash, access_key, assigned, s["default_limit"]))
+        return {"name": name, "host": s["domain"], "controlPort": s["control_port"],
+                "remotePort": assigned, "accessKey": access_key,
+                "token": (self.root / "transport-token").read_text().strip(), "ca": ""}
+
+    def clients(self):
+        rows = dict(self.state()["clients"])
+        with contextlib.closing(self.database()) as db:
+            for name, key, assigned, limit, enabled in db.execute("SELECT name,access_key,port,bandwidth,enabled FROM clients"):
+                rows[name] = {"port": assigned, "limit": limit, "enabled": bool(enabled),
+                              "key_hash": hashlib.sha256(key.encode()).hexdigest()}
+        return rows
 
     def state(self):
         with (self.root / "state.json").open() as f:
@@ -112,9 +179,21 @@ class Manager:
         atomic(self.root / "state.json", json.dumps(data, indent=2) + "\n", gid=self.gid)
 
     @contextlib.contextmanager
+    def allocation_lock(self):
+        self.database().close()
+        with (self.registrations / "allocation.lock").open("a") as f:
+            os.chmod(f.name, 0o600)
+            if str(self.root) == "/etc/vpn20-relay" and os.geteuid() == 0:
+                import pwd
+                owner = pwd.getpwnam("vpn20-relay")
+                os.fchown(f.fileno(), owner.pw_uid, owner.pw_gid)
+            fcntl.flock(f, fcntl.LOCK_EX)
+            yield
+
+    @contextlib.contextmanager
     def lock(self):
         self.root.mkdir(parents=True, exist_ok=True)
-        with (self.root / "state.lock").open("a") as f:
+        with self.allocation_lock(), (self.root / "state.lock").open("a") as f:
             os.chmod(f.name, 0o600)
             fcntl.flock(f, fcntl.LOCK_EX)
             yield
@@ -126,13 +205,15 @@ class Manager:
             raise ValueError("Dải cổng hoặc cổng điều phối không hợp lệ")
         with self.lock():
             old = self.state() if (self.root / "state.json").exists() else None
-            if old and any(not first <= row["port"] <= last for row in old["clients"].values()):
+            if old and any(not first <= row["port"] <= last for row in self.clients().values()):
                 raise ValueError("Dải cổng mới loại bỏ cổng đã cấp; giữ lại dải hiện có")
             data = {
                 "schema": 1, "version": VERSION, "domain": host, "control_port": control,
                 "port_start": first, "port_end": last, "plugin_port": plugin,
                 "default_limit": limit, "clients": old["clients"] if old else {},
             }
+            if old and "backend_port" in old:
+                data["backend_port"] = old["backend_port"]
             if not (self.root / "transport-token").exists():
                 if old:
                     raise ValueError("Thiếu khóa vận chuyển; khôi phục bản sao lưu")
@@ -143,8 +224,10 @@ class Manager:
     def server_config(self, data=None):
         s = data or self.state()
         q = json.dumps
-        return f'''bindAddr = "0.0.0.0"
-bindPort = {s["control_port"]}
+        bind_addr = "127.0.0.1" if "backend_port" in s else "0.0.0.0"
+        return f'''bindAddr = "{bind_addr}"
+bindPort = {s.get("backend_port", s["control_port"])}
+proxyBindAddr = "0.0.0.0"
 auth.method = "token"
 auth.tokenSource.type = "file"
 auth.tokenSource.file.path = {q(str(self.root / "transport-token"))}
@@ -249,7 +332,7 @@ Windows xem task: VPN20-Relay-{name}
             s = self.state()
             if name in s["clients"]:
                 raise ValueError("Tên đã có; dùng export để lấy lại profile, không đổi khóa tự động")
-            used = {c["port"] for c in s["clients"].values()}
+            used = {c["port"] for c in self.clients().values()}
             if assigned is None:
                 assigned = next((n for n in range(s["port_start"], s["port_end"] + 1) if n not in used), None)
                 if assigned is None:
@@ -276,7 +359,10 @@ Windows xem task: VPN20-Relay-{name}
         with self.lock():
             s = self.state()
             if name not in s["clients"]:
-                raise ValueError("Không có profile này")
+                with contextlib.closing(self.database()) as db, db:
+                    if db.execute("UPDATE clients SET enabled=? WHERE name=?", (int(value), name)).rowcount == 0:
+                        raise ValueError("Không có máy này")
+                return
             s["clients"][name]["enabled"] = value
             self.save(s)
 
@@ -320,7 +406,7 @@ class Policy:
         user = content.get("user") if login else content.get("user", {}).get("user")
         if not isinstance(user, str) or not NAME.fullmatch(user):
             raise ValueError("unauthorized")
-        row = self.manager.state()["clients"].get(user)
+        row = self.manager.clients().get(user)
         if not row or not row["enabled"]:
             raise ValueError("unauthorized")
         if login:
@@ -403,11 +489,169 @@ def http_server(policy, address):
     return Server(address, Handler)
 
 
+class EnrollmentLimit:
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.hosts = collections.OrderedDict()
+        self.total = collections.deque()
+
+    def allow(self, host):
+        now = time.monotonic()
+        with self.lock:
+            while self.total and self.total[0] <= now - 60:
+                self.total.popleft()
+            attempts = self.hosts.pop(host, collections.deque())
+            while attempts and attempts[0] <= now - 60:
+                attempts.popleft()
+            self.hosts[host] = attempts
+            while len(self.hosts) > 2048:
+                self.hosts.popitem(last=False)
+            if len(attempts) >= 5 or len(self.total) >= 30:
+                return False
+            attempts.append(now)
+            self.total.append(now)
+            return True
+
+
+def public_server(manager, address):
+    """HTTPS enrollment and existing frp TLS share the public control port."""
+    s = manager.state()
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+    ctx.load_cert_chain(manager.root / "tls/fullchain.pem", manager.root / "tls/privkey.pem")
+    ctx.set_alpn_protocols(["http/1.1"])
+    backend_ctx = ssl.create_default_context(cafile=str(manager.root / "ca.pem"))
+    limiter = EnrollmentLimit()
+
+    class HTTP(http.server.BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
+        def log_message(self, *args):
+            pass
+
+        def reply(self, status, data):
+            body = json.dumps(data).encode()
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Connection", "close")
+            self.end_headers()
+            self.wfile.write(body)
+            self.close_connection = True
+
+        def do_GET(self):
+            self.reply(404, {"error": "not found"})
+
+        def do_POST(self):
+            if self.path != "/api/v1/enroll":
+                return self.reply(404, {"error": "not found"})
+            if not limiter.allow(self.client_address[0]):
+                return self.reply(429, {"error": "try later"})
+            try:
+                size = int(self.headers.get("Content-Length", "0"))
+                if not 0 < size <= 4096 or self.headers.get("Transfer-Encoding") or self.headers.get_content_type() != "application/json":
+                    return self.reply(400, {"error": "invalid request"})
+                data = json.loads(self.rfile.read(size))
+                result = manager.register(data.get("password"), data.get("claim"))
+            except (ValueError, KeyError, TypeError, AttributeError, OSError, sqlite3.Error):
+                return self.reply(403, {"error": "registration denied"})
+            self.reply(200, result)
+
+    class Handler(socketserver.BaseRequestHandler):
+        def handle(self):
+            front = backend = None
+            try:
+                self.request.settimeout(5)
+                # Older standalone frpc prefixes its TLS handshake with 0x17.
+                if self.request.recv(1, socket.MSG_PEEK) == b"\x17":
+                    self.request.recv(1)
+                front = ctx.wrap_socket(self.request, server_side=True)
+                if front.selected_alpn_protocol() == "http/1.1":
+                    HTTP(front, self.client_address, self.server)
+                    return
+                raw = socket.create_connection(("127.0.0.1", s["backend_port"]), timeout=5)
+                try:
+                    backend = backend_ctx.wrap_socket(raw, server_hostname=s["domain"])
+                except Exception:
+                    raw.close()
+                    raise
+                # One thread owns both SSL objects. Bound buffering and avoid
+                # concurrent SSL_read/SSL_write on the same OpenSSL session.
+                front.setblocking(False)
+                backend.setblocking(False)
+                peers = {front: backend, backend: front}
+                buffers = {front: bytearray(), backend: bytearray()}
+                pending_writes = {}
+                while True:
+                    reads = [conn for conn in peers if len(buffers[peers[conn]]) < 1048576]
+                    writes = [conn for conn in peers if buffers[conn]]
+                    pending = [conn for conn in reads if conn.pending()]
+                    readable, writable, _ = select.select(reads, writes, [], 0 if pending else 1)
+                    for conn in set(readable + pending):
+                        try:
+                            data = conn.recv(65536)
+                            if not data:
+                                return
+                            buffers[peers[conn]].extend(data)
+                        except (ssl.SSLWantReadError, ssl.SSLWantWriteError):
+                            pass
+                    for conn in writable:
+                        try:
+                            chunk = pending_writes.setdefault(conn, bytes(buffers[conn][:65536]))
+                            sent = conn.send(chunk)
+                            del buffers[conn][:sent]
+                            pending_writes.pop(conn, None)
+                        except (ssl.SSLWantReadError, ssl.SSLWantWriteError):
+                            pass
+            except OSError:
+                pass
+            finally:
+                if front is not None:
+                    front.close()
+                if backend is not None:
+                    backend.close()
+
+    class Server(socketserver.ThreadingTCPServer):
+        allow_reuse_address = True
+        daemon_threads = True
+        block_on_close = False
+        request_queue_size = 32
+
+        def __init__(self, *args):
+            self.slots = threading.BoundedSemaphore(256)
+            super().__init__(*args)
+
+        def process_request(self, request, client_address):
+            if not self.slots.acquire(blocking=False):
+                request.close()
+                return
+            try:
+                super().process_request(request, client_address)
+            except Exception:
+                self.slots.release()
+                raise
+
+        def process_request_thread(self, request, client_address):
+            try:
+                super().process_request_thread(request, client_address)
+            finally:
+                self.slots.release()
+
+        def handle_error(self, request, client_address):
+            pass  # Never print request bodies, credentials or remote error text.
+
+    return Server(address, Handler)
+
+
 def serve(manager, executable):
     s = manager.state()
     server = http_server(Policy(manager), ("127.0.0.1", s["plugin_port"]))
     worker = threading.Thread(target=server.serve_forever, daemon=True)
     worker.start()
+    public = public_server(manager, ("0.0.0.0", s["control_port"])) if "backend_port" in s else None
+    if public:
+        threading.Thread(target=public.serve_forever, daemon=True).start()
     child = None
     ending = threading.Event()
 
@@ -429,6 +673,9 @@ def serve(manager, executable):
         server.shutdown()
         server.server_close()
         worker.join(timeout=5)
+        if public:
+            public.shutdown()
+            public.server_close()
 
 
 LINUX_INSTALL = r'''#!/usr/bin/env bash
@@ -525,6 +772,7 @@ def main():
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("list")
     sub.add_parser("sync-tls")
+    sub.add_parser("password", help="Đặt/đổi mật khẩu đăng ký relay")
     for name in ["export", "revoke", "enable"]:
         p = sub.add_parser(name)
         p.add_argument("name")
@@ -545,9 +793,15 @@ def main():
         return serve(m, args.frps)
     if args.command == "sync-tls":
         print("Đã nạp TLS mới" if m.sync_tls() else "TLS không thay đổi")
+    elif args.command == "password":
+        password = getpass.getpass("Mật khẩu relay mới (ít nhất 12 ký tự): ")
+        if password != getpass.getpass("Nhập lại mật khẩu relay: "):
+            raise ValueError("Hai mật khẩu không khớp")
+        m.set_password(password)
+        print("Đã đổi mật khẩu đăng ký. Các máy đã đăng ký vẫn giữ khóa riêng.")
     elif args.command == "list":
         s = m.state()
-        for name, row in sorted(s["clients"].items()):
+        for name, row in sorted(m.clients().items()):
             print(f'{name}\t{s["domain"]}:{row["port"]}\t{row["limit"]}\t{"enabled" if row["enabled"] else "revoked"}')
     elif args.command in ["revoke", "enable"]:
         m.enabled(args.name, args.command == "enable")

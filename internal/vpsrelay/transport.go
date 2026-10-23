@@ -30,9 +30,12 @@ type tcpConnector struct {
 }
 
 func (c *tcpConnector) Open() error {
-	pool := x509.NewCertPool()
-	if !pool.AppendCertsFromPEM([]byte(c.ca)) {
-		return errors.New("invalid TLS certificate authority")
+	var pool *x509.CertPool
+	if c.ca != "" {
+		pool = x509.NewCertPool()
+		if !pool.AppendCertsFromPEM([]byte(c.ca)) {
+			return errors.New("invalid TLS certificate authority")
+		}
 	}
 	ctx, cancel := context.WithTimeout(c.ctx, 5*time.Second)
 	defer cancel()

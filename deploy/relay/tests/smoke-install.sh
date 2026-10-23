@@ -14,15 +14,20 @@ m.certificate(pathlib.Path(sys.argv[2]))
 PY
 args=(--domain relay.example.test --source-dir "$source_dir"
   --frp-archive "$FRP_ARCHIVE" --cert-file "$work/cert.pem"
-  --key-file "$work/key.pem" --ca-file "$work/ca.pem")
+  --key-file "$work/key.pem" --ca-file "$work/ca.pem" --password-file "$work/password")
+printf '%s\n' 'native-enrollment-fixture-password' > "$work/password"
 bash "$source_dir/install.sh" "${args[@]}"
 systemctl is-active --quiet vpn20-relay.service
 systemctl is-enabled --quiet vpn20-relay.service
 systemctl is-enabled --quiet vpn20-relay-tls.timer
 test "$(systemctl show vpn20-relay.service -p User --value)" = vpn20-relay
+# Legacy exports remain supported for already deployed 1.3.0 clients only.
+vpn20-relay add office >/dev/null
 test "$(stat -c '%a' /etc/vpn20-relay/clients/office/vpn20-relay-office.zip)" = 600
+FRPC="$FRPC" python3 "$source_dir/tests/probe_installed.py"
 sha256sum /etc/vpn20-relay/transport-token /etc/vpn20-relay/state.json \
-  /etc/vpn20-relay/clients/office/credentials.json > "$work/identity"
+  /etc/vpn20-relay/clients/office/credentials.json /etc/vpn20-relay/enrollment.json \
+  /var/lib/vpn20-relay/clients.db > "$work/identity"
 # Repeat without re-supplying domain or certificate settings.
 bash "$source_dir/install.sh" --source-dir "$source_dir" --frp-archive "$FRP_ARCHIVE"
 sha256sum --check "$work/identity"
