@@ -51,6 +51,7 @@ jobs:
           path: internal/server/static/dist/
       - run: go vet ./...
       - run: go test -count=1 ./...
+      - run: go test -race -count=1 ./internal/vpsrelay
       - run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
   docker-build:
@@ -69,3 +70,31 @@ jobs:
           printf 'FROM vpn20:update-new\nRUN printf "#!/bin/sh\\nexit 1\\n" > /usr/local/bin/vpn20 && chmod 0755 /usr/local/bin/vpn20\n' | docker build -t vpn20:update-bad -
           sudo env "PATH=$PATH" "GOTOOLCHAIN=local" "VPN20_TEST_DOCKER_OLD_IMAGE=vpn20:ci-${GITHUB_SHA::8}" VPN20_TEST_DOCKER_NEW_IMAGE=vpn20:update-new VPN20_TEST_DOCKER_BAD_IMAGE=vpn20:update-bad go test -count=1 -v -timeout 8m ./internal/update -run '^TestDockerDaemonUpdate$'
 
+  relay-ui:
+    needs: [web, go]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 26
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: go.mod
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: web-dist
+          path: internal/server/static/dist/
+      - name: Verify actual relay settings in Chromium
+        run: |
+          npm install --prefix "$RUNNER_TEMP/relay-browser" --ignore-scripts --no-audit --no-fund playwright@1.62.1
+          node "$RUNNER_TEMP/relay-browser/node_modules/playwright/cli.js" install --with-deps chromium --only-shell
+          go build -o "$RUNNER_TEMP/vpn20-ui" ./cmd/vpn20
+          NODE_PATH="$RUNNER_TEMP/relay-browser/node_modules" VPN20_UI_BINARY="$RUNNER_TEMP/vpn20-ui" VPN20_UI_SCREENSHOT="$RUNNER_TEMP/relay-settings.png" node web/tests/relay-ui.cjs
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: relay-settings-browser
+          path: ${{ runner.temp }}/relay-settings.png
+          if-no-files-found: ignore

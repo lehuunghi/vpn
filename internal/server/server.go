@@ -182,6 +182,8 @@ func (s *Server) routes() {
 	m.Handle("POST /api/update", s.admin(s.handleUpdateStart))
 	m.Handle("GET /api/subdomain", s.admin(s.handleSubdomain))
 	m.Handle("POST /api/subdomain", s.admin(s.handleSubdomainUpdate))
+	m.Handle("GET /api/relay", s.admin(s.handleRelay))
+	m.Handle("PUT /api/relay", s.admin(s.handleRelayUpdate))
 	m.Handle("POST /api/peers", s.admin(s.handleCreatePeer))
 	m.Handle("PUT /api/peers/{id}", s.admin(s.handleUpdatePeer))
 	m.Handle("DELETE /api/peers/{id}", s.admin(s.handleDeletePeer))

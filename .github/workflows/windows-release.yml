@@ -13,6 +13,16 @@ on:
       - 'VERSION'
       - 'docs/windows.md'
       - '.github/workflows/windows-release.yml'
+  pull_request:
+    paths:
+      - 'cmd/**'
+      - 'internal/**'
+      - 'web/**'
+      - 'go.*'
+      - 'packaging/windows/**'
+      - 'packaging/linux/**'
+      - 'VERSION'
+      - '.github/workflows/windows-release.yml'
   workflow_dispatch:
 
 permissions:

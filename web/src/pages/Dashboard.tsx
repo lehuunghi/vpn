@@ -109,7 +109,7 @@ export function Dashboard() {
                 </dd>
                 <dt>Điểm kết nối</dt>
                 <dd className="mono">
-                  {status.settings.endpointHost}:{status.settings.endpointPort}
+                  {status.clientEndpoint || (status.settings.endpointHost + ":" + status.settings.endpointPort)}
                 </dd>
                 <dt>VPN</dt>
                 <dd className="mono">{status.addresses.join(", ")}</dd>

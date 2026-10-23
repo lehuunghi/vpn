@@ -19,6 +19,8 @@ cache and in web/node_modules and is not repeated here.
 | modernc.org/sqlite, libc, mathutil, memory | BSD-3-Clause |
 | github.com/skip2/go-qrcode | MIT, Tom Harwood |
 | github.com/caddyserver/certmagic | Apache-2.0 |
+| github.com/fatedier/frp, github.com/fatedier/golib | Apache-2.0 |
+| github.com/fatedier/yamux | MPL-2.0 |
 | github.com/caddyserver/zerossl | MIT |
 | github.com/mholt/acmez/v3 | Apache-2.0 |
 | github.com/libdns/libdns | MIT |

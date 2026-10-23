@@ -31,7 +31,8 @@ type client struct {
 func newClient(t *testing.T) (*client, *engine.Engine) {
 	t.Helper()
 	cfg := &config.Config{
-		DBPath: ":memory:", Backend: "mock", Iface: "wg0", ListenPort: 51820,
+		DataDir: t.TempDir(),
+		DBPath:  ":memory:", Backend: "mock", Iface: "wg0", ListenPort: 51820,
 		Subnet4: netip.MustParsePrefix("10.8.0.0/24"), HTTP: "127.0.0.1:0",
 		SessionIdle: time.Hour, SessionMax: 24 * time.Hour, TrafficRetention: time.Hour, PollInterval: time.Hour,
 		InitialEndpoint: "vpn.example.com", InitialDNS: "1.1.1.1", MetricsToken: "metrics-secret",
