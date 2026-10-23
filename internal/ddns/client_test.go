@@ -87,22 +87,13 @@ func TestIPDiscoveryPreservesServiceFailure(t *testing.T) {
 	}
 }
 
-func TestHTTPSURLIncludes8443AndPreservesExplicitPort(t *testing.T) {
-	for _, test := range []struct{ port, suffix string }{{"8443", ":8443"}, {"443", ""}, {"9443", ":9443"}} {
-		m := New(Options{HTTPSListen: ":" + test.port})
+func TestHTTPSURLUsesExistingAdminAddress(t *testing.T) {
+	for _, tc := range []struct{ address, suffix string }{{":51821", ":51821"}, {"[::]:443", ""}, {"127.0.0.1:5555", ":5555"}} {
+		m := New(Options{AdminAddress: tc.address})
 		m.state.Active = "office." + Domain
-		m.address = "[::]:" + test.port
-		if got := m.Snapshot().URL; got != "https://office."+Domain+test.suffix {
+		if got := m.Snapshot().URL; got != "https://office."+Domain+tc.suffix {
 			t.Fatal(got)
 		}
-		if m.opts.HTTPSListen != ":"+test.port {
-			t.Fatal("explicit operator port changed")
-		}
-		m.broker.close()
-	}
-	if m := New(Options{}); m.opts.HTTPSListen != ":8443" {
-		t.Fatal(m.opts.HTTPSListen)
-	} else {
 		m.broker.close()
 	}
 }

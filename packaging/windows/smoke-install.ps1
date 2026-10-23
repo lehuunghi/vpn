@@ -101,15 +101,19 @@ try {
     $headers = @{Origin=$base}
     $settings = Get-Content "$data\config.json" -Raw | ConvertFrom-Json
     $settings | Add-Member -NotePropertyName VPN20_HTTP_LISTEN -NotePropertyValue "127.0.0.1:$adminPort" -Force
+    $settings | Add-Member -NotePropertyName VPN20_DDNS_HTTPS -NotePropertyValue ':9443' -Force
     $settings | ConvertTo-Json | Set-Content "$data\config.json" -Encoding utf8NoBOM
     Start-Service VPN20
     for ($i=0; $i -lt 40; $i++) {
         try { $null=Invoke-RestMethod "$base/api/health"; break } catch { Start-Sleep -Milliseconds 500 }
     }
     if (Get-NetFirewallRule -Name 'VPN20-Admin-LAN' -ErrorAction SilentlyContinue) { throw 'Loopback listener unexpectedly opened LAN firewall' }
+    $null = New-NetFirewallRule -Name 'VPN20-Public-HTTPS' -DisplayName 'Legacy VPN20 HTTPS' -Group 'VPN20-Public' -Direction Inbound -Action Allow -Protocol TCP -LocalPort 9443 -Profile Any
     $p = Start-Process -FilePath $Installer -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-' -Wait -PassThru
     if ($p.ExitCode -ne 0) { throw 'Installer did not automatically enable LAN' }
     if ((Get-Content "$data\config.json" -Raw | ConvertFrom-Json).VPN20_HTTP_LISTEN -ne "0.0.0.0:$adminPort") { throw 'Automatic LAN setup lost the configured port' }
+    if ((Get-Content "$data\config.json" -Raw | ConvertFrom-Json).PSObject.Properties.Name -contains 'VPN20_DDNS_HTTPS') { throw 'Upgrade kept the retired HTTPS port setting' }
+    if (Get-NetFirewallRule -Name 'VPN20-Public-HTTPS' -ErrorAction SilentlyContinue) { throw 'Upgrade kept the retired standalone HTTPS firewall rule' }
     $adminRule = Get-NetFirewallRule -Name 'VPN20-Admin-LAN'
     if ((@($adminRule | Get-NetFirewallAddressFilter).RemoteAddress -join ',') -ne 'LocalSubnet') { throw 'Automatic LAN setup opened an unrestricted admin firewall' }
     if ([int]($adminRule | Get-NetFirewallPortFilter).LocalPort -ne $adminPort) { throw 'Automatic LAN firewall lost the configured port' }

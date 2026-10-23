@@ -19,7 +19,6 @@ import (
 
 const Domain = "vpn.20.com.vn"
 const DefaultAPI = "https://ddns.20.com.vn"
-const DefaultHTTPS = ":8443"
 
 type apiError struct {
 	Status        int

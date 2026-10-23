@@ -36,7 +36,7 @@ LABEL org.opencontainers.image.title="VPN20" \
     org.opencontainers.image.source="https://github.com/lehuunghi/vpn" \
     org.opencontainers.image.licenses="AGPL-3.0-or-later"
 VOLUME ["/data"]
-EXPOSE 51820/udp 51821/tcp 8443/tcp
+EXPOSE 51820/udp 51821/tcp
 HEALTHCHECK --interval=10s --timeout=5s --start-period=60s \
     CMD ["/usr/local/bin/vpn20", "healthcheck"]
 ENTRYPOINT ["vpn20"]

@@ -4,12 +4,12 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"io/fs"
 	"path/filepath"
-	"strings"
+	"sync"
 	"time"
 
 	"github.com/caddyserver/certmagic"
-	"github.com/libdns/libdns"
 	"go.uber.org/zap"
 )
 
@@ -21,12 +21,14 @@ type certificates interface {
 	Close()
 }
 type automaticCertificates struct {
-	config *certmagic.Config
-	cache  *certmagic.Cache
+	config   *certmagic.Config
+	cache    *certmagic.Cache
+	attempts sync.Map // hostname -> context.CancelCauseFunc for one outer attempt
 }
 
 func newCertificates(m *Manager) (certificates, error) {
 	logger := zap.NewNop()
+	automatic := &automaticCertificates{}
 	var magic *certmagic.Config
 	cache := certmagic.NewCache(certmagic.CacheOptions{
 		GetConfigForCert: func(certmagic.Certificate) (*certmagic.Config, error) { return magic, nil },
@@ -35,6 +37,17 @@ func newCertificates(m *Manager) (certificates, error) {
 	magic = certmagic.New(cache, certmagic.Config{
 		Storage: &certmagic.FileStorage{Path: filepath.Join(m.opts.DataDir, "ddns", "certificates")},
 		Logger:  logger,
+		OnEvent: func(_ context.Context, event string, data map[string]any) error {
+			if event == "cert_failed" {
+				name, _ := data["identifier"].(string)
+				if cancel, ok := automatic.attempts.Load(name); ok {
+					if err, ok := data["error"].(error); ok {
+						cancel.(context.CancelCauseFunc)(err)
+					}
+				}
+			}
+			return nil
+		},
 	})
 	ca := m.opts.ACMECA
 	if ca == "" {
@@ -42,15 +55,51 @@ func newCertificates(m *Manager) (certificates, error) {
 	}
 	issuer := certmagic.NewACMEIssuer(magic, certmagic.ACMEIssuer{
 		CA: ca, Agreed: true, DisableHTTPChallenge: true, DisableTLSALPNChallenge: true, Logger: logger,
-		DNS01Solver: &certmagic.DNS01Solver{DNSManager: certmagic.DNSManager{
-			DNSProvider: &dnsProvider{manager: m}, PropagationTimeout: 2 * time.Minute, Resolvers: []string{"1.1.1.1:53", "8.8.8.8:53"},
-		}},
+		DNS01Solver: newBrokerSolver(m),
 	})
 	magic.Issuers = []certmagic.Issuer{issuer}
-	return &automaticCertificates{magic, cache}, nil
+	automatic.config, automatic.cache = magic, cache
+	return automatic, nil
 }
 func (a *automaticCertificates) Manage(ctx context.Context, hostname string) error {
-	return a.config.ManageSync(ctx, []string{hostname})
+	// ManageSync/ObtainCertSync can prompt on stdin for the first account.
+	// Services have no interactive stdin. The Async obtain/renew APIs execute
+	// non-interactively; this caller waits for their bounded operation before
+	// caching the certificate and reporting HTTPS ready.
+	for _, cert := range a.cache.AllMatchingCertificates(hostname) {
+		if !cert.Expired() {
+			return nil
+		} // Cache maintenance handles renewal.
+	}
+	// Let the manager own retry/backoff. Stop CertMagic's internal retry loop
+	// after the first failed attempt and preserve that cause for the UI.
+	ctx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
+	a.attempts.Store(hostname, cancel)
+	defer a.attempts.Delete(hostname)
+	operationError := func(err error) error {
+		if cause := context.Cause(ctx); cause != nil {
+			return cause
+		}
+		return err
+	}
+	cert, err := a.config.CacheManagedCertificate(ctx, hostname)
+	if errors.Is(err, fs.ErrNotExist) {
+		if err = a.config.ObtainCertAsync(ctx, hostname); err != nil {
+			return operationError(err)
+		}
+		cert, err = a.config.CacheManagedCertificate(ctx, hostname)
+	}
+	if err != nil {
+		return operationError(err)
+	}
+	if cert.NeedsRenewal(a.config) {
+		if err := a.config.RenewCertAsync(ctx, hostname, false); err != nil {
+			return operationError(err)
+		}
+		_, err = a.config.CacheManagedCertificate(ctx, hostname)
+	}
+	return err
 }
 func (a *automaticCertificates) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
 	return a.config.GetCertificate(hello)
@@ -69,34 +118,3 @@ func (a *automaticCertificates) Forget(hostname string) {
 	}
 }
 func (a *automaticCertificates) Close() { a.cache.Stop() }
-
-// The provider accepts only DNS-01 TXT records for names owned by this install.
-// The Worker repeats these checks against the token's binding.
-type dnsProvider struct{ manager *Manager }
-
-func (p *dnsProvider) change(ctx context.Context, zone string, records []libdns.Record, remove bool) ([]libdns.Record, error) {
-	completed := make([]libdns.Record, 0, len(records))
-	for _, record := range records {
-		rr := record.RR()
-		name := strings.TrimSuffix(strings.ToLower(libdns.AbsoluteName(rr.Name, zone)), ".")
-		if rr.Type != "TXT" || !strings.HasPrefix(name, "_acme-challenge.") {
-			return completed, errors.New("Chỉ cho phép bản ghi xác thực SSL")
-		}
-		hostname := strings.TrimPrefix(name, "_acme-challenge.")
-		token := p.manager.key(hostname)
-		if token == "" {
-			return completed, errors.New("Hostname nằm ngoài quyền của máy")
-		}
-		if err := p.manager.broker.challenge(ctx, token, rr.Data, remove); err != nil {
-			return completed, err
-		}
-		completed = append(completed, record)
-	}
-	return completed, nil
-}
-func (p *dnsProvider) AppendRecords(ctx context.Context, zone string, records []libdns.Record) ([]libdns.Record, error) {
-	return p.change(ctx, zone, records, false)
-}
-func (p *dnsProvider) DeleteRecords(ctx context.Context, zone string, records []libdns.Record) ([]libdns.Record, error) {
-	return p.change(ctx, zone, records, true)
-}

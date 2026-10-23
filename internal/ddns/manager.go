@@ -9,7 +9,6 @@ import (
 	"errors"
 	"log/slog"
 	"net"
-	"net/http"
 	"regexp"
 	"strings"
 	"sync"
@@ -23,14 +22,13 @@ type Store interface {
 	SetSetting(context.Context, string, string) error
 }
 type Options struct {
-	APIURL, HTTPSListen, DataDir, ACMECA string
-	Store                                Store
-	Handler                              http.Handler
-	Activate                             func(context.Context, string) error
-	OpenFirewall                         func(context.Context, string) error
-	Log                                  *slog.Logger
-	interval                             time.Duration
-	factory                              func(*Manager) (certificates, error)
+	APIURL, AdminAddress, DataDir, ACMECA string
+	Store                                 Store
+	Activate                              func(context.Context, string) error
+	OpenFirewall                          func(context.Context, string) error
+	Log                                   *slog.Logger
+	interval                              time.Duration
+	factory                               func(*Manager) (certificates, error)
 }
 type Status struct {
 	Name            string     `json:"name"`
@@ -64,10 +62,11 @@ type Manager struct {
 	done                chan struct{}
 	cancel              context.CancelFunc
 	certs               certificates
-	https               *http.Server
 	address             string
 	retryAt             time.Time
 	certificateFailures int
+	certificateFailure  string
+	publicHTTPS         bool
 }
 
 var labelPattern = regexp.MustCompile("^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
@@ -87,16 +86,13 @@ func New(opts Options) *Manager {
 	if opts.APIURL == "" {
 		opts.APIURL = DefaultAPI
 	}
-	if opts.HTTPSListen == "" {
-		opts.HTTPSListen = DefaultHTTPS
-	}
 	if opts.interval == 0 {
 		opts.interval = 2 * time.Minute
 	}
 	if opts.factory == nil {
 		opts.factory = newCertificates
 	}
-	m := &Manager{opts: opts, wake: make(chan struct{}, 1), done: make(chan struct{})}
+	m := &Manager{opts: opts, address: opts.AdminAddress, wake: make(chan struct{}, 1), done: make(chan struct{})}
 	m.status = Status{Phase: "idle", Reachability: "not_checked"}
 	m.state.Keys = map[string]string{}
 	var err error
@@ -206,6 +202,7 @@ func (m *Manager) Configure(ctx context.Context, value string) (Status, error) {
 	}
 	m.state = next
 	m.retryAt = time.Time{} // Explicit user retry may follow a corrected Worker.
+	m.certificateFailure = ""
 	m.status.Busy = true
 	m.status.Phase = "updating"
 	m.status.Message = "Đang đăng ký tên và cập nhật IP…"
@@ -236,11 +233,6 @@ func (m *Manager) key(hostname string) string {
 func (m *Manager) run(ctx context.Context) {
 	defer close(m.done)
 	defer func() {
-		if m.https != nil {
-			shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			_ = m.https.Shutdown(shutdown)
-		}
 		if m.certs != nil {
 			m.certs.Close()
 		}
@@ -290,62 +282,61 @@ func (m *Manager) sync(ctx context.Context, hostname string) error {
 	m.mu.Unlock()
 	return nil
 }
-func (m *Manager) ensureHTTPS(ctx context.Context) error {
-	if m.https != nil {
-		return nil
+
+// SetAdminAddress records the existing API listener; DDNS never opens a socket.
+func (m *Manager) SetAdminAddress(address string) {
+	m.mu.Lock()
+	m.address = address
+	m.mu.Unlock()
+}
+
+func (m *Manager) IsActiveHostname(host string) bool {
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
 	}
-	ln, err := net.Listen("tcp", m.opts.HTTPSListen)
-	if err != nil {
-		return errors.New("Không mở được cổng HTTPS; kiểm tra cổng đang sử dụng")
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.state.Active != "" && strings.EqualFold(host, m.state.Active)
+}
+
+func (m *Manager) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+	m.mu.Lock()
+	hostname, certs := m.state.Active, m.certs
+	m.mu.Unlock()
+	if certs == nil || hostname == "" || !strings.EqualFold(hello.ServerName, hostname) {
+		return nil, errors.New("Chứng chỉ cho hostname này chưa sẵn sàng")
+	}
+	return certs.GetCertificate(hello)
+}
+
+func (m *Manager) ensureCertificates() error {
+	if m.certs != nil {
+		return nil
 	}
 	certs, err := m.opts.factory(m)
 	if err != nil {
-		ln.Close()
 		return errors.New("Không khởi tạo được bộ cấp SSL")
-	}
-	if m.opts.OpenFirewall != nil {
-		if err := m.opts.OpenFirewall(ctx, m.opts.HTTPSListen); err != nil {
-			ln.Close()
-			certs.Close()
-			return errors.New("Không mở được firewall cho HTTPS")
-		}
 	}
 	m.mu.Lock()
 	m.certs = certs
-	m.address = ln.Addr().String()
 	m.mu.Unlock()
-	server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		m.mu.Lock()
-		hostname := m.state.Active
-		m.mu.Unlock()
-		host := r.Host
-		if h, _, err := net.SplitHostPort(host); err == nil {
-			host = h
-		}
-		if hostname == "" || !strings.EqualFold(host, hostname) {
-			http.Error(w, "Unknown hostname", http.StatusMisdirectedRequest)
-			return
-		}
-		m.opts.Handler.ServeHTTP(w, r)
-	}), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, IdleTimeout: 120 * time.Second, MaxHeaderBytes: 64 << 10}
-	server.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12, GetCertificate: func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
-		m.mu.Lock()
-		hostname := m.state.Active
-		m.mu.Unlock()
-		if hostname == "" || !strings.EqualFold(hello.ServerName, hostname) {
-			return nil, errors.New("unknown hostname")
-		}
-		return certs.GetCertificate(hello)
-	}}
-	m.https = server
-	go func() {
-		err := server.ServeTLS(ln, "", "")
-		if err != nil && !errors.Is(err, http.ErrServerClosed) {
-			m.fail("Cổng HTTPS đã dừng; khởi động lại dịch vụ")
-		}
-	}()
 	return nil
 }
+
+func (m *Manager) enablePublicHTTPS(ctx context.Context) error {
+	if m.publicHTTPS || m.opts.OpenFirewall == nil {
+		return nil
+	}
+	m.mu.Lock()
+	address := m.address
+	m.mu.Unlock()
+	if err := m.opts.OpenFirewall(ctx, address); err != nil {
+		return errors.New("Không mở được firewall cho HTTPS trên cổng quản trị")
+	}
+	m.publicHTTPS = true
+	return nil
+}
+
 func (m *Manager) reconcile(ctx context.Context) {
 	m.mu.Lock()
 	active, pending := m.state.Active, m.state.Pending
@@ -361,21 +352,32 @@ func (m *Manager) reconcile(ctx context.Context) {
 		m.fail("Địa chỉ API DDNS không hợp lệ")
 		return
 	}
-	if err := m.ensureHTTPS(ctx); err != nil {
+	if err := m.ensureCertificates(); err != nil {
 		m.fail(err.Error())
 		return
 	}
 	// Keep the currently working name alive even if a requested rename fails.
 	if active != "" && pending != active {
 		certCtx, cancel := context.WithTimeout(ctx, 4*time.Minute)
-		err := m.certs.Manage(certCtx, active)
+		certErr := m.certs.Manage(certCtx, active)
 		cancel()
-		if err != nil && pending == "" {
-			m.fail("Chưa cấp/gia hạn được SSL; dịch vụ sẽ tự thử lại")
-			return
+		// Cached HTTPS remains reachable even during a broker outage. An SSL
+		// renewal failure must not stop the dynamic-IP updates for this name.
+		if certErr == nil {
+			if err := m.enablePublicHTTPS(ctx); err != nil && pending == "" {
+				m.fail(err.Error())
+				return
+			}
 		}
 		if err := m.sync(ctx, active); err != nil && pending == "" {
 			m.fail(err.Error())
+			return
+		}
+		if certErr != nil && pending == "" {
+			if m.opts.Log != nil {
+				m.opts.Log.Warn("automatic HTTPS certificate failed", "hostname", active, "error", certErr)
+			}
+			m.fail(certificateMessage(certErr))
 			return
 		}
 	}
@@ -390,9 +392,10 @@ func (m *Manager) reconcile(ctx context.Context) {
 		}
 		m.mu.Lock()
 		retryAt := m.retryAt
+		failure := m.certificateFailure
 		m.mu.Unlock()
 		if time.Now().Before(retryAt) {
-			m.fail("Đang chờ thử lại cấp SSL tự động")
+			m.fail(failure + " · Đang chờ thử lại cấp SSL tự động")
 			return
 		}
 		m.mu.Lock()
@@ -403,25 +406,12 @@ func (m *Manager) reconcile(ctx context.Context) {
 		err := m.certs.Manage(certCtx, pending)
 		cancel()
 		if err != nil {
-			m.mu.Lock()
-			m.certificateFailures++
-			delay := 5 * time.Minute
-			for i := 1; i < m.certificateFailures && delay < time.Hour; i++ {
-				delay *= 2
-			}
-			if delay > time.Hour {
-				delay = time.Hour
-			}
-			m.retryAt = time.Now().Add(delay)
-			m.mu.Unlock()
-			if m.opts.Log != nil {
-				m.opts.Log.Warn("automatic HTTPS certificate failed", "hostname", pending, "error", err)
-			}
-			m.fail("Chưa cấp được SSL; sẽ tự thử lại. Kiểm tra Worker hỗ trợ DNS-01 và kết nối DNS")
+			m.certificateFailed(pending, err)
 			return
 		}
 		m.mu.Lock()
 		m.certificateFailures = 0
+		m.certificateFailure = ""
 		m.retryAt = time.Time{}
 		next := m.state
 		next.Active = pending
@@ -438,6 +428,10 @@ func (m *Manager) reconcile(ctx context.Context) {
 			m.fail("Đã cấp SSL nhưng chưa lưu được cấu hình; sẽ tự thử lại")
 			return
 		}
+		if err := m.enablePublicHTTPS(ctx); err != nil {
+			m.fail(err.Error())
+			return
+		}
 		if m.opts.Activate != nil {
 			if err := m.opts.Activate(ctx, pending); err != nil {
 				m.fail("Đã cấp SSL nhưng chưa cập nhật được Endpoint VPN; sẽ tự thử lại")
@@ -446,6 +440,10 @@ func (m *Manager) reconcile(ctx context.Context) {
 		}
 		active = pending
 	} else if active != "" && m.opts.Activate != nil {
+		if err := m.enablePublicHTTPS(ctx); err != nil {
+			m.fail(err.Error())
+			return
+		}
 		if err := m.opts.Activate(ctx, active); err != nil {
 			m.fail("Chưa đồng bộ được Endpoint VPN")
 			return

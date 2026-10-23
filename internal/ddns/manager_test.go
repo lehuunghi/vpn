@@ -21,8 +21,6 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"github.com/libdns/libdns"
 )
 
 type memoryStore struct {
@@ -101,12 +99,13 @@ func (c *testCertificates) Forget(h string) { c.mu.Lock(); delete(c.certs, h); c
 func (c *testCertificates) Close()          {}
 
 type brokerFixture struct {
-	mu        sync.Mutex
-	keys      map[string]string
-	claims    []string
-	retired   []string
-	updates   int
-	failClaim atomic.Bool
+	mu         sync.Mutex
+	keys       map[string]string
+	claims     []string
+	retired    []string
+	updates    int
+	failClaim  atomic.Bool
+	failUpdate atomic.Bool
 }
 
 func testBroker(t *testing.T) (*httptest.Server, *brokerFixture) {
@@ -140,6 +139,11 @@ func testBroker(t *testing.T) (*httptest.Server, *brokerFixture) {
 			}
 			json.NewEncoder(w).Encode(map[string]any{"ok": true, "hostname": in.Name + "." + Domain})
 		case "/v1/update":
+			if f.failUpdate.Load() {
+				w.WriteHeader(503)
+				io.WriteString(w, `{"error":"service_error"}`)
+				return
+			}
 			f.mu.Lock()
 			f.updates++
 			f.mu.Unlock()
@@ -166,10 +170,21 @@ func testBroker(t *testing.T) (*httptest.Server, *brokerFixture) {
 }
 func startManager(t *testing.T, api string, store *memoryStore, certs *testCertificates, activated *atomic.Value) *Manager {
 	t.Helper()
-	m := New(Options{APIURL: api, HTTPSListen: "127.0.0.1:0", DataDir: t.TempDir(), Store: store, interval: time.Hour,
-		Handler:  http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, "secure") }),
+	m := New(Options{APIURL: api, DataDir: t.TempDir(), Store: store, interval: time.Hour,
 		Activate: func(_ context.Context, h string) error { activated.Store(h); return nil },
 		factory:  func(*Manager) (certificates, error) { return certs, nil }})
+
+	admin := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !m.IsActiveHostname(r.Host) {
+			http.Error(w, "Unknown hostname", 421)
+			return
+		}
+		io.WriteString(w, "secure")
+	}))
+	admin.TLS = &tls.Config{MinVersion: tls.VersionTLS12, GetCertificate: m.GetCertificate}
+	admin.StartTLS()
+	m.SetAdminAddress(admin.Listener.Addr().String())
+	t.Cleanup(admin.Close)
 	m.Start(context.Background())
 	t.Cleanup(m.Close)
 	return m
@@ -290,57 +305,72 @@ func TestLostClaimResponseSurvivesRestartWithSameKey(t *testing.T) {
 		t.Fatalf("lost key after restart: %v", f.claims)
 	}
 }
-func TestDNSProviderRejectsOtherNamesAndTypes(t *testing.T) {
+func TestCertificateManagerUsesExistingAdminPort(t *testing.T) {
 	api, _ := testBroker(t)
-	store := &memoryStore{}
-	certs := &testCertificates{certs: map[string]*tls.Certificate{}}
-	var active atomic.Value
-	m := startManager(t, api.URL, store, certs, &active)
-	_, _ = m.Configure(context.Background(), "office")
-	await(t, m, "ready")
-	p := &dnsProvider{manager: m}
-	good := libdns.TXT{Name: "_acme-challenge.office.vpn", Text: strings.Repeat("a", 43)}
-	if _, err := p.AppendRecords(context.Background(), "20.com.vn.", []libdns.Record{good}); err != nil {
-		t.Fatal(err)
-	}
-	for _, record := range []libdns.Record{
-		libdns.TXT{Name: "_acme-challenge.other.vpn", Text: strings.Repeat("a", 43)},
-		libdns.TXT{Name: "office.vpn", Text: strings.Repeat("a", 43)},
-		libdns.RR{Name: "_acme-challenge.office.vpn", Type: "A", Data: "8.8.8.8"},
-	} {
-		if _, err := p.AppendRecords(context.Background(), "20.com.vn.", []libdns.Record{record}); err == nil {
-			t.Fatal("allowed out-of-scope record")
-		}
-	}
-	if _, err := p.DeleteRecords(context.Background(), "20.com.vn.", []libdns.Record{good}); err != nil {
-		t.Fatal(err)
-	}
-}
-func TestOccupiedHTTPSPortDoesNotClaimName(t *testing.T) {
-	api, f := testBroker(t)
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer ln.Close()
-	m := New(Options{APIURL: api.URL, HTTPSListen: ln.Addr().String(), Store: &memoryStore{}, DataDir: t.TempDir()})
+	certs := &testCertificates{certs: map[string]*tls.Certificate{}}
+	m := New(Options{APIURL: api.URL, AdminAddress: ln.Addr().String(), Store: &memoryStore{}, DataDir: t.TempDir(), factory: func(*Manager) (certificates, error) { return certs, nil }})
 	m.Start(context.Background())
 	defer m.Close()
 	_, _ = m.Configure(context.Background(), "office")
-	status := await(t, m, "error")
-	if !strings.Contains(status.Message, "cổng HTTPS") {
+	status := await(t, m, "ready")
+	_, port, _ := net.SplitHostPort(ln.Addr().String())
+	if status.URL != "https://office."+Domain+":"+port {
 		t.Fatal(status)
 	}
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if len(f.claims) != 0 {
-		t.Fatal("name claimed despite port collision")
+}
+
+func TestCachedHTTPSIsEnabledBeforeBrokerRecovery(t *testing.T) {
+	api, f := testBroker(t)
+	store := &memoryStore{}
+	certs := &testCertificates{certs: map[string]*tls.Certificate{}}
+	var active atomic.Value
+	first := startManager(t, api.URL, store, certs, &active)
+	_, _ = first.Configure(context.Background(), "office")
+	await(t, first, "ready")
+	first.Close()
+	f.failUpdate.Store(true)
+	var opened atomic.Bool
+	second := New(Options{APIURL: api.URL, AdminAddress: "0.0.0.0:51821", Store: store, DataDir: t.TempDir(), factory: func(*Manager) (certificates, error) { return certs, nil }, OpenFirewall: func(_ context.Context, address string) error {
+		if address != "0.0.0.0:51821" {
+			t.Error(address)
+		}
+		opened.Store(true)
+		return nil
+	}})
+	second.Start(context.Background())
+	defer second.Close()
+	status := await(t, second, "error")
+	if !opened.Load() || !status.SSLReady || status.URL != "https://office."+Domain+":51821" {
+		t.Fatal("cached HTTPS was lost during broker outage", status)
 	}
 }
-func TestLabelAndHTTPSDefaults(t *testing.T) {
-	if DefaultHTTPS != ":8443" {
-		t.Fatal("default must be port 8443")
+
+func TestRenewalFailureDoesNotStopDDNSUpdates(t *testing.T) {
+	api, f := testBroker(t)
+	certs := &testCertificates{certs: map[string]*tls.Certificate{}}
+	var active atomic.Value
+	m := startManager(t, api.URL, &memoryStore{}, certs, &active)
+	_, _ = m.Configure(context.Background(), "office")
+	await(t, m, "ready")
+	f.mu.Lock()
+	before := f.updates
+	f.mu.Unlock()
+	certs.fail.Store(true)
+	m.reconcile(context.Background())
+	status := await(t, m, "error")
+	f.mu.Lock()
+	after := f.updates
+	f.mu.Unlock()
+	if after <= before || !status.SSLReady {
+		t.Fatal("renewal failure stopped DDNS or lost cached TLS", status)
 	}
+}
+func TestLabelAndAPISecurity(t *testing.T) {
 	for _, value := range []string{"", "-bad", "bad-", "a.b", "office.vpn.20.com.vn", "admin", strings.Repeat("a", 64)} {
 		if _, err := Label(value); err == nil {
 			t.Errorf("accepted %q", value)
