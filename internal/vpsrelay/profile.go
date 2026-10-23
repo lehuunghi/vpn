@@ -48,6 +48,7 @@ type profile struct {
 	AccessKey   string `json:"accessKey"`
 	Token       string `json:"token"`
 	CA          string `json:"ca"`
+	SystemTrust bool   `json:"systemTrust,omitempty"`
 }
 
 func (p profile) validate() error {
@@ -57,6 +58,12 @@ func (p profile) validate() error {
 	if !namePattern.MatchString(p.Name) || !keyPattern.MatchString(p.AccessKey) || !keyPattern.MatchString(p.Token) ||
 		p.ControlPort < 1 || p.ControlPort > 65535 || p.RemotePort < 1 || p.RemotePort > 65535 {
 		return errors.New("Profile relay thiếu khóa, tên hoặc cổng hợp lệ.")
+	}
+	if p.SystemTrust {
+		if p.CA != "" {
+			return errors.New("Profile relay dùng CA hệ thống không được kèm CA riêng.")
+		}
+		return nil
 	}
 	if len(p.CA) == 0 || len(p.CA) > MaxProfileSize || !x509.NewCertPool().AppendCertsFromPEM([]byte(p.CA)) {
 		return errors.New("Profile relay không có CA hợp lệ.")

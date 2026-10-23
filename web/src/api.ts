@@ -281,7 +281,7 @@ export const api = {
   usageByPeer: (range: Range) => get<PeerUsage[]>(`/api/usage/peers?range=${range}`),
   settings: () => get<Settings>("/api/settings"),
   relay: () => get<RelayStatus>("/api/relay"),
-  saveRelay: (body: { enabled: boolean; domain: string; profileZip?: string }) => put<RelayStatus>("/api/relay", body),
+  saveRelay: (body: { enabled: boolean; domain: string; password?: string }) => put<RelayStatus>("/api/relay", body),
   saveSettings: (body: Settings) => put<Settings>("/api/settings", body),
   audit: (limit = 200) => get<AuditEntry[]>(`/api/audit?limit=${limit}`),
   users: () => get<User[]>("/api/users"),

@@ -24,24 +24,22 @@ Windows có máy chủ RDP. Chưa kiểm thử trực tiếp mọi edition/thi�
 ## Chuẩn bị mạng cho mọi cách cài
 
 Nếu máy chủ sau NAT/CGNAT, có thể dùng VPS relay thay chuyển tiếp UDP 51820 trên
-router. Từ **1.3.0**, bộ cài Windows x64/x86, Linux và image Docker đã tích hợp
+router. Từ **1.4.0**, bộ cài Windows x64/x86, Linux và image Docker đã tích hợp
 client relay; không cần tải frpc riêng trên máy VPN20.
 
-1. Cài [relay trên VPS](../deploy/relay/README.md), tạo profile riêng cho máy
-   VPN20 bằng **sudo vpn20-relay add tenmay**.
-2. Tải ZIP profile về máy quản trị. Mở **Cài đặt → Server relay**, bật **Dùng
-   server relay**, nhập domain VPS và chọn ZIP. Nếu để trống domain khi nhập
-   ZIP, ứng dụng lấy domain trong profile. Bấm **Cập nhật relay**.
+1. Cài hoặc cập nhật [relay trên VPS](../deploy/relay/README.md) lên **1.1.0**.
+   Sau domain, đặt và xác nhận mật khẩu relay (nhập ẩn, tối thiểu 12 ký tự).
+2. Mở **Cài đặt → Server relay**, bật **Dùng server relay**, nhập domain VPS
+   và mật khẩu vừa đặt. Bấm **Cập nhật relay**; không tải ZIP hay cài client riêng.
 3. Chờ trạng thái **Đã kết nối relay**, tải lại .conf hoặc quét lại QR trên từng
    thiết bị. Endpoint đã chứa domain và cổng UDP được VPS cấp.
 
-Profile giữ khóa và cổng riêng; không thể đăng nhập bằng domain đơn lẻ.
-Khóa được lưu trong cơ sở dữ liệu riêng của VPN20 và giữ qua nâng cấp/khởi động
+VPS tự cấp khóa và cổng riêng cho từng máy. Mật khẩu chỉ dùng khi đăng ký,
+không được lưu trong VPN20. Khóa riêng giữ trong cơ sở dữ liệu qua nâng cấp/khởi động
 lại. Khi tắt relay, cấu hình xuất ra dùng lại điểm kết nối trực tiếp; các tệp đã
 cài trên thiết bị cần tải lại. DDNS/SSL quản trị vẫn hoạt động riêng.
 Relay chuyển UDP WireGuard; trang quản trị giữ cổng hiện tại, mặc định 51821.
-Nếu từng cài client relay riêng, dừng client đó trước khi bật cùng profile trong
-VPN20; xem lệnh chuyển đổi ở hướng dẫn relay.
+Máy VPN20 1.3.0 đã kết nối relay tiếp tục dùng khóa/cổng đã lưu sau nâng cấp.
 
 Để cấp tên **ten.vpn.20.com.vn** và SSL tự động chỉ bằng một nút trong
 Cài đặt, xem [Subdomain và HTTPS tự động](subdomain.md). Tính năng dùng

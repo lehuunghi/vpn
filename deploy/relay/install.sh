@@ -12,15 +12,16 @@ first=''
 last=''
 limit=''
 plugin=''
-client=office
+backend=''
+password_file=''
 email=''
 cert=''
 key=''
 ca=''
 source_dir=''
 archive=''
-helper_hash=40be908872f9ca919972a563604ff649066b76ed7eb9b72e946059e594524daa
-helper_blob=b2c271363719b1a4d3a3dd07931155a5c23ddaa7
+helper_hash=b943afa4d7ad7d19f209cb658eb46a5d4834fc51fba41e97519693858f12f9e2
+helper_blob=1f0e0fba81e9e4e2379cd318ccdc25560468c8b9
 frp_version=0.71.1
 work=''
 transaction=0
@@ -42,16 +43,17 @@ usage() {
   cat <<'EOF'
 sudo bash install.sh --domain relay.example.com [options]
   --domain HOST         Domain DNS only trỏ về VPS; hỏi khi chạy ở terminal.
+  --password-file PATH  Đọc mật khẩu từ tệp riêng khi cài tự động; mặc định hỏi ẩn sau domain.
   --control-port PORT   Cổng frpc kết nối ra, mặc định 443/TCP.
   --udp-start PORT      Đầu dải cổng public, mặc định 20001.
   --udp-end PORT        Cuối dải cổng public, mặc định 20100.
   --limit 1MB           Giới hạn mỗi máy VPN20; MB/KB là byte/giây; 0 bỏ giới hạn.
-  --client NAME         Tên profile đầu tiên, mặc định office.
   --email EMAIL         Email ACME tùy chọn. Trống: đăng ký không email.
   --cert-file PATH      Dùng chứng chỉ hiện có thay HTTP-01; đi cùng --key-file.
   --key-file PATH       Khóa TLS. Tự đồng bộ khi các tệp nguồn thay đổi.
   --ca-file PATH        CA tin cậy tùy chọn; mặc định bundle CA hệ thống.
   --plugin-port PORT    Cổng chính sách nội bộ, mặc định 18921/loopback.
+  --backend-port PORT   Cổng frps nội bộ, mặc định 18922/loopback.
   --source-dir PATH     Dùng relay.py từ checkout; vẫn kiểm tra SHA-256.
   --frp-archive PATH    Archive frps cục bộ; vẫn kiểm tra SHA-256.
   --help
@@ -65,15 +67,16 @@ EOF
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --help|-h) usage; exit 0;;
-    --domain|--control-port|--udp-start|--udp-end|--limit|--client|--email|--cert-file|--key-file|--ca-file|--source-dir|--frp-archive|--plugin-port)
+    --domain|--control-port|--udp-start|--udp-end|--limit|--email|--cert-file|--key-file|--ca-file|--source-dir|--frp-archive|--plugin-port|--backend-port|--password-file)
       [[ $# -ge 2 && -n "$2" ]] || die "Thiếu giá trị cho $1"
       case "$1" in
         --domain) domain="$2";; --control-port) control="$2";;
         --udp-start) first="$2";; --udp-end) last="$2";; --limit) limit="$2";;
-        --client) client="$2";; --email) email="$2";;
+        --email) email="$2";;
         --cert-file) cert="$2";; --key-file) key="$2";; --ca-file) ca="$2";;
         --source-dir) source_dir="$2";; --frp-archive) archive="$2";;
         --plugin-port) plugin="$2";;
+        --backend-port) backend="$2";; --password-file) password_file="$2";;
       esac
       shift 2;;
     *) die "Tham số không hợp lệ: $1";;
@@ -168,6 +171,10 @@ if [[ -z "$domain" ]]; then
 fi
 control="${control:-443}"; first="${first:-20001}"; last="${last:-20100}"
 limit="${limit:-1MB}"; plugin="${plugin:-18921}"
+if [[ -z "$backend" && -f "$root/state.json" ]]; then
+  backend="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("backend_port",18922))' "$root/state.json")"
+fi
+backend="${backend:-18922}"
 [[ -z "$email" || "$email" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]] || die "Email không hợp lệ."
 [[ -z "$cert" && -z "$key" || -n "$cert" && -n "$key" ]] || die "--cert-file cần đi cùng --key-file."
 install -d -m 0700 "$work/stage"
@@ -180,9 +187,36 @@ manager=m.Manager(sys.argv[2],grp.getgrnam("vpn20-relay").gr_gid)
 s=manager.init(sys.argv[3],*sys.argv[4:9])
 print("Domain:",s["domain"],"TCP:",s["control_port"],"UDP:",str(s["port_start"])+"–"+str(s["port_end"]))
 PY
+python3 - "$work/relay.py" "$work/stage" "$backend" "$password_file" <<'PY'
+import getpass,grp,importlib.util,pathlib,sqlite3,sys
+spec=importlib.util.spec_from_file_location("relay",sys.argv[1])
+m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+manager=m.Manager(sys.argv[2],grp.getgrnam("vpn20-relay").gr_gid)
+s=manager.state();backend=m.port(sys.argv[3])
+if backend in (s["control_port"],s["plugin_port"]):
+    raise SystemExit("Cổng nội bộ phải khác cổng công khai và cổng chính sách")
+s["backend_port"]=backend
+db=pathlib.Path("/var/lib/vpn20-relay/clients.db")
+if db.exists():
+    with sqlite3.connect("file:"+str(db)+"?mode=ro",uri=True) as conn:
+        if any(not s["port_start"]<=row[0]<=s["port_end"] for row in conn.execute("SELECT port FROM clients")):
+            raise SystemExit("Dải cổng mới loại bỏ máy đã đăng ký")
+if sys.argv[4]:
+    password=pathlib.Path(sys.argv[4]).read_text().removesuffix("\n").removesuffix("\r")
+    manager.set_password(password)
+elif not (manager.root/"enrollment.json").exists():
+    try:
+        with open("/dev/tty","r+") as tty:
+            password=getpass.getpass("Mật khẩu relay (ít nhất 12 ký tự): ",stream=tty)
+            if password!=getpass.getpass("Nhập lại mật khẩu relay: ",stream=tty):
+                raise SystemExit("Hai mật khẩu không khớp")
+    except OSError:
+        raise SystemExit("Cần terminal để đặt mật khẩu; cài tự động dùng --password-file")
+    manager.set_password(password)
+manager.save(s)
+PY
 domain="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["domain"])' "$work/stage/state.json")"
-[[ "$client" =~ ^[a-z0-9][a-z0-9-]{0,39}$ ]] || die "Tên client không hợp lệ."
-python3 - "$control" "$plugin" <<'PY'
+python3 - "$control" "$plugin" "$backend" <<'PY'
 import re,subprocess,sys
 pid=subprocess.run(["systemctl","show","vpn20-relay.service","--property=MainPID","--value"],capture_output=True,text=True).stdout.strip()
 allowed={pid} if pid.isdigit() and pid!="0" else set()
@@ -232,7 +266,7 @@ else
 fi
 ca="${ca:-/etc/ssl/certs/ca-certificates.crt}"
 ca="$(realpath -s "$ca")"
-python3 - "$work/relay.py" "$work/stage" "$root" "$cert" "$key" "$ca" "$tls_source" "$client" <<'PY'
+python3 - "$work/relay.py" "$work/stage" "$root" "$cert" "$key" "$ca" "$tls_source" <<'PY'
 import grp,importlib.util,pathlib,sys
 spec=importlib.util.spec_from_file_location("relay",sys.argv[1])
 m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
@@ -244,8 +278,7 @@ manager.save(s)
 for name,source in [("tls/fullchain.pem",s["cert_source"]),("tls/privkey.pem",s["key_source"]),("ca.pem",s["ca_source"])]:
     m.atomic(manager.root/name,pathlib.Path(source).read_bytes(),gid=manager.gid)
 m.atomic(manager.root/"frps.toml",m.Manager(sys.argv[3]).server_config(s),gid=manager.gid)
-if sys.argv[8] not in s["clients"]: manager.add(sys.argv[8])
-for name in manager.state()["clients"]: manager.profile(name)
+# Existing private profiles remain usable; new machines enroll using a password.
 PY
 if [[ -n "$archive" ]]; then
   cp -- "$archive" "$work/frp.tar.gz"
@@ -274,6 +307,14 @@ for path in "${paths[@]}"; do
 done
 transaction=1
 systemctl stop "$unit" vpn20-relay-tls.timer 2>/dev/null || true
+python3 - "$work/stage/state.json" <<'PY'
+import json,pathlib,sqlite3,sys
+s=json.load(open(sys.argv[1]));db=pathlib.Path("/var/lib/vpn20-relay/clients.db")
+if db.exists():
+    with sqlite3.connect("file:"+str(db)+"?mode=ro",uri=True) as conn:
+        if any(not s["port_start"]<=row[0]<=s["port_end"] for row in conn.execute("SELECT port FROM clients")):
+            raise SystemExit("Dải cổng mới loại bỏ máy đã đăng ký; giữ dải hiện có")
+PY
 install -d -o root -g vpn20-relay -m 0750 "$root" "$root/tls" "$lib"
 cp -a "$work/stage/." "$root/"
 chown root:vpn20-relay "$root" "$root/tls"
@@ -293,6 +334,8 @@ After=network-online.target
 [Service]
 User=vpn20-relay
 Group=vpn20-relay
+StateDirectory=vpn20-relay
+StateDirectoryMode=0700
 ExecStart=/usr/local/bin/vpn20-relay serve
 Restart=always
 RestartSec=5
@@ -361,10 +404,10 @@ PY
 systemctl is-active --quiet "$unit"
 committed=1
 echo
-echo "Đã cài VPN20 relay 1.0.0: $domain:$control/TCP; UDP $first–$last."
-echo "Profile đầu tiên: $root/clients/$client/vpn20-relay-$client.zip"
-echo 'Chép ZIP riêng tới máy VPN20 rồi chạy script cài client trong ZIP.'
-echo 'Thêm máy: sudo vpn20-relay add vanphong2'
+echo "Đã cài VPN20 relay 1.1.0: $domain:$control/TCP; UDP $first–$last."
+echo 'VPN20 1.4.0: mở Cài đặt → Server relay, nhập domain và mật khẩu vừa đặt.'
+echo 'Không tải ZIP, không cài client riêng. Mỗi máy tự nhận khóa và cổng UDP riêng.'
+echo 'Đổi mật khẩu: sudo vpn20-relay password'
 echo 'Danh sách: sudo vpn20-relay list'
 echo "Xem log: sudo journalctl -u $unit -n 50 --no-pager"
 echo "Security group của nhà cung cấp cần TCP $control và UDP $first–$last."

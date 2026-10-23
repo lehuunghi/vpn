@@ -91,7 +91,9 @@ jobs:
           npm install --prefix "$RUNNER_TEMP/relay-browser" --ignore-scripts --no-audit --no-fund playwright@1.62.1
           node "$RUNNER_TEMP/relay-browser/node_modules/playwright/cli.js" install --with-deps chromium --only-shell
           go build -o "$RUNNER_TEMP/vpn20-ui" ./cmd/vpn20
-          NODE_PATH="$RUNNER_TEMP/relay-browser/node_modules" VPN20_UI_BINARY="$RUNNER_TEMP/vpn20-ui" VPN20_UI_SCREENSHOT="$RUNNER_TEMP/relay-settings.png" node web/tests/relay-ui.cjs
+          go build -o "$RUNNER_TEMP/frps-ui" ./internal/vpsrelay/testdata/frps
+          printf '127.0.0.1 relay.example.test\n' | sudo tee -a /etc/hosts >/dev/null
+          NODE_PATH="$RUNNER_TEMP/relay-browser/node_modules" VPN20_UI_BINARY="$RUNNER_TEMP/vpn20-ui" VPN20_FRPS_BINARY="$RUNNER_TEMP/frps-ui" VPN20_UI_SCREENSHOT="$RUNNER_TEMP/relay-settings.png" node web/tests/relay-ui.cjs
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
