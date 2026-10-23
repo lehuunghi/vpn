@@ -24,10 +24,23 @@ Sau domain, bộ cài hỏi **Mật khẩu relay** và **Nhập lại mật kh�
 Mật khẩu dài **12–256 ký tự**, nhập ẩn; không đặt mật khẩu vào câu lệnh.
 Nếu VPS thiếu curl: **sudo apt-get update && sudo apt-get install -y curl**.
 
+Chỉ coi là cài xong khi thấy **Đã cài VPN20 relay 1.1.1**. Kiểm tra trên VPS:
+
+~~~bash
+sudo systemctl is-active vpn20-relay.service
+sudo vpn20-relay list
+~~~
+
+Dịch vụ cần trả về `active`. Danh sách máy có thể trống trước khi kết nối VPN20.
+Không cần chạy `vpn20-relay password` ngay sau cài: mật khẩu đã đặt trong bộ cài.
+
 Nếu bản 1.1.0 dừng ở **Cần terminal để đặt mật khẩu** dù đang mở SSH, tải lại
 bộ cài hiện hành và chạy lại lệnh trên; bản 1.1.1 sửa bước đọc mật khẩu terminal.
 Dòng Domain/TCP/UDP chỉ là xác nhận tham số, chưa báo cài thành công. Lệnh
 `vpn20-relay password` chỉ có sau khi bộ cài tạo chương trình quản lý.
+Nếu gặp `sudo: vpn20-relay: command not found` sau lỗi này, chạy lại bộ cài ở trên.
+Nếu đã báo cài thành công nhưng vẫn không tìm thấy lệnh, thử
+`sudo /usr/local/bin/vpn20-relay list`; lệnh này dùng đường dẫn đầy đủ.
 
 Với SSH chạy lệnh từ xa, dùng `ssh -t` để cấp terminal. Với công cụ chạy lệnh
 tự động không có TTY, `--password-file` là đường dẫn tới **tệp trên VPS chứa
@@ -91,6 +104,32 @@ Không xóa dữ liệu VPN20 nếu muốn đăng ký lại mà giữ đúng kh�
 Tải `install.sh`, rồi chạy `sudo bash install.sh --help` để xem tùy chọn.
 `--password-file /duong-dan/tep-rieng` đọc mật khẩu từ tệp riêng khi không có
 terminal. Không truyền mật khẩu trực tiếp trên dòng lệnh.
+
+Ví dụ: chuẩn bị tệp một dòng trên VPS, giới hạn quyền đọc rồi chạy bộ cài.
+Các bước tạo/sửa tệp sau dành cho người chuẩn bị lần đầu; hệ thống tự động có
+thể cấp tệp từ kho bí mật của bạn thay cho `sudoedit`.
+
+~~~bash
+sudo install -m 600 /dev/null /root/vpn20-relay-password
+sudoedit /root/vpn20-relay-password
+~~~
+
+Trong trình sửa, nhập mật khẩu 12–256 ký tự vào một dòng, lưu và đóng tệp.
+Không dùng lại đường dẫn trên nếu nó đang chứa tệp mật khẩu bạn cần giữ.
+Sau đó tải bộ cài và dùng đường dẫn tệp làm giá trị của `--password-file`:
+
+~~~bash
+curl -fsSL --proto '=https' --proto-redir '=https' \
+  https://raw.githubusercontent.com/lehuunghi/vpn/main/deploy/relay/install.sh \
+  -o vpn20-relay-install.sh &&
+sudo bash vpn20-relay-install.sh --domain relay.20.com.vn \
+  --password-file /root/vpn20-relay-password &&
+sudo rm -f /root/vpn20-relay-password
+~~~
+
+Nếu bộ cài lỗi, tệp được giữ để chạy lại; xóa tệp khi không còn cần dùng.
+Khi cài trực tiếp trong SSH, dùng lệnh cài thông thường ở đầu trang để nhập ẩn;
+không cần tạo tệp này.
 
 Có thể dùng `--cert-file`, `--key-file` để dùng chứng chỉ do hệ thống hiện có
 quản lý. Chứng chỉ cần được máy VPN20 tin cậy qua CA hệ thống; không bỏ xác minh

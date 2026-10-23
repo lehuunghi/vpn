@@ -27,8 +27,9 @@ Nếu máy chủ sau NAT/CGNAT, có thể dùng VPS relay thay chuyển tiếp U
 router. Từ **1.4.0**, bộ cài Windows x64/x86, Linux và image Docker đã tích hợp
 client relay; không cần tải frpc riêng trên máy VPN20.
 
-1. Cài hoặc cập nhật [relay trên VPS](../deploy/relay/README.md) lên **1.1.0**.
+1. Cài hoặc cập nhật [relay trên VPS](../deploy/relay/README.md) lên **1.1.1**.
    Sau domain, đặt và xác nhận mật khẩu relay (nhập ẩn, tối thiểu 12 ký tự).
+   Chờ thông báo **Đã cài VPN20 relay 1.1.1**; dòng Domain/TCP/UDP chưa báo cài xong.
 2. Mở **Cài đặt → Server relay**, bật **Dùng server relay**, nhập domain VPS
    và mật khẩu vừa đặt. Bấm **Cập nhật relay**; không tải ZIP hay cài client riêng.
 3. Chờ trạng thái **Đã kết nối relay**, tải lại .conf hoặc quét lại QR trên từng
