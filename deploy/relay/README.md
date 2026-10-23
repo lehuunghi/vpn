@@ -4,12 +4,12 @@ Một lệnh cài frps, SSL, gia hạn, systemd, firewall đang hoạt động v
 client có phân quyền. Không cài VPN20 lên VPS; cổng quản trị VPN20 vẫn là 51821.
 
 VPS: Ubuntu 22.04/24.04/26.04 hoặc Debian 12/13, amd64/arm64, systemd.
-Profile có bộ cài client Windows x64 và Linux amd64/arm64; không có Windows ARM64.
+Profile có bộ cài client Windows x64 và Ubuntu/Debian amd64/arm64; không có Windows ARM64.
 
 ## Chuẩn bị
 
 1. Cloudflare: tạo A **relay.20.com.vn** → IPv4 public VPS, **DNS only**.
-   Chỉ tạo AAAA nếu IPv6 VPS thật sự hoạt động và nhận được kết nối.
+   Bộ relay này nghe IPv4; không tạo AAAA cho hostname relay.
 2. Security group của nhà cung cấp cho phép TCP **80**, **443** và UDP
    **20001–20100**. Giữ quyền SSH hiện có.
 3. TCP 80 và 443 trên VPS chưa được dịch vụ khác dùng. Bộ cài không dừng

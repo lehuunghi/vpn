@@ -213,7 +213,7 @@ Giới hạn cho cả máy VPN20: {c["limit"]}; MB là byte/giây (1 MB xấp x�
 Giải nén trên máy cài VPN20, giữ các tệp cùng thư mục.
 Windows x64: mở PowerShell Administrator tại thư mục, chạy:
   powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\\Install-Client.ps1
-Linux amd64/arm64: sudo bash ./install-client.sh
+Ubuntu/Debian amd64/arm64: sudo bash ./install-client.sh
 Các script tải frpc {FRP_VERSION} chính thức, kiểm tra SHA-256 và tự khởi động lại.
 
 Sửa Endpoint trong bản .conf thử nghiệm thành {s["domain"]}:{c["port"]}.
@@ -435,6 +435,7 @@ LINUX_INSTALL = r'''#!/usr/bin/env bash
 set -euo pipefail
 [[ $(id -u) == 0 ]] || { echo "Chạy bằng sudo bash ./install-client.sh"; exit 1; }
 command -v systemctl >/dev/null || { echo "Cần Linux systemd"; exit 1; }
+command -v apt-get >/dev/null || { echo "Bộ cài client này cần Ubuntu/Debian"; exit 1; }
 source_dir="$(cd -- "$(dirname -- "$0")" && pwd)"
 name="@NAME@"
 case "$(uname -m)" in

@@ -30,6 +30,10 @@ ngay trên cổng quản trị **TCP 51821**, không mở cổng HTTPS riêng.
 Quản trị dịch vụ cần nâng Worker lên 0.2.1 một lần; xem
 [hướng dẫn subdomain và SSL](docs/subdomain.md).
 
+Máy VPN20 sau NAT/CGNAT có thể dùng **[bộ cài relay riêng trên VPS](deploy/relay/README.md)**
+để kết nối WireGuard mà không mở UDP 51820 trên router. Bộ cài tự cấu hình TLS,
+dịch vụ và profile kết nối cho từng máy VPN20.
+
 ## Cài trực tiếp trên Windows
 
 Tải bộ cài Windows x64/x86 tại **[Releases](https://github.com/lehuunghi/vpn/releases)**.

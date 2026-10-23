@@ -19,8 +19,8 @@ key=''
 ca=''
 source_dir=''
 archive=''
-helper_hash=74c479d793b44a0981774583a34764b9411d562eacf58da9586dbead186bda50
-helper_blob=55d875b81b6b1adbb7895c649f41fdd6447cfc0c
+helper_hash=40be908872f9ca919972a563604ff649066b76ed7eb9b72e946059e594524daa
+helper_blob=b2c271363719b1a4d3a3dd07931155a5c23ddaa7
 frp_version=0.71.1
 work=''
 transaction=0
@@ -263,9 +263,9 @@ with tarfile.open(sys.argv[1],"r:gz") as t:
 PY
 chmod 0755 "$work/frps"
 "$work/frps" verify -c "$work/stage/frps.toml"
-systemctl is-active --quiet "$unit" && previous_active=1 || true
-systemctl is-enabled --quiet "$unit" && previous_enabled=1 || true
-systemctl is-enabled --quiet vpn20-relay-tls.timer && previous_tls_enabled=1 || true
+if systemctl is-active --quiet "$unit"; then previous_active=1; fi
+if systemctl is-enabled --quiet "$unit"; then previous_enabled=1; fi
+if systemctl is-enabled --quiet vpn20-relay-tls.timer; then previous_tls_enabled=1; fi
 install -d -m 0700 "$work/backup"
 i=0
 for path in "${paths[@]}"; do

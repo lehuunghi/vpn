@@ -230,6 +230,12 @@ class Integration(unittest.TestCase):
                 # Revoked profile cannot return on its next authentication.
                 time.sleep(.5)
                 self.assertFalse(m.state()["clients"]["office"]["enabled"])
+                with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+                    sock.settimeout(1)
+                    sock.sendto(b"revoked", ("127.0.0.1", rows["office"]["port"]))
+                    with self.assertRaises(socket.timeout):
+                        sock.recvfrom(65535)
+                exchange(2)  # Another profile remains usable after revocation.
                 # Policy backend unavailable must reject registration.
                 policy_server.shutdown()
                 client("wrong-key")
