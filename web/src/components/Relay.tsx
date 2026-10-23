@@ -65,12 +65,12 @@ export function Relay() {
       <Check label="Dùng server relay" hint="Kết nối VPN qua VPS khi máy chủ sau NAT/CGNAT." checked={enabled} onChange={setEnabled} disabled={busy || !status} />
       {(enabled || status?.configured) && <>
         <Field label="Domain relay" hint="Nhập domain của VPS; để trống khi nhập ZIP để dùng domain trong profile.">
-          <input className="input" value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="relay.20.com.vn"
+          <input aria-label="Domain relay" className="input" value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="relay.20.com.vn"
             maxLength={253} autoCapitalize="none" autoCorrect="off" spellCheck={false} disabled={busy} />
         </Field>
         <Field label={status?.configured ? "Thay profile relay (tùy chọn)" : "Profile relay"}
           hint="Chọn ZIP do lệnh vpn20-relay add/export trên VPS tạo. Khóa và cổng được lấy tự động từ profile.">
-          <input ref={fileInput} className="input" type="file" accept=".zip,application/zip"
+          <input aria-label="ZIP profile relay" ref={fileInput} className="input" type="file" accept=".zip,application/zip"
             onChange={(e) => setFile(e.target.files?.[0] ?? null)} disabled={busy} />
         </Field>
       </>}
