@@ -89,6 +89,67 @@ Mật khẩu trên VPS được băm PBKDF2 với salt riêng; có giới hạn 
 và toàn VPS. SSL luôn được xác minh trước khi gửi mật khẩu. TCP 443 phục vụ cả
 đăng ký HTTPS và kết nối relay; các cổng nội bộ 18921/18922 chỉ nghe loopback.
 
+## Đổi giới hạn tốc độ relay
+
+Mặc định mỗi máy VPN20 được giới hạn **1 MB/giây, xấp xỉ 8 Mbps**. Các thiết bị
+WireGuard kết nối vào cùng máy VPN20 chia sẻ mức này. Giá trị `0` bỏ giới hạn
+của relay; tốc độ thực tế vẫn phụ thuộc đường truyền, VPS và máy VPN20.
+
+| Giá trị | Ý nghĩa |
+| --- | --- |
+| `0` | Không giới hạn tốc độ |
+| `1MB` | Khoảng 8 Mbps cho mỗi máy VPN20 |
+| `10MB` | Khoảng 80 Mbps cho mỗi máy VPN20 |
+| `100MB` | Khoảng 800 Mbps cho mỗi máy VPN20 |
+| `512KB` | Khoảng 4 Mbps cho mỗi máy VPN20 |
+
+Chạy đoạn sau **trên VPS relay đã cài xong** để đổi giới hạn cho **tất cả máy
+đã đăng ký và mức mặc định cho máy đăng ký mới**. Giữ `"0"` để bỏ giới hạn;
+thay giá trị trong dòng `limit = ...` bằng `"10MB"`, `"100MB"` hoặc `"1MB"`
+nếu muốn đặt lại giới hạn. Đoạn lệnh giữ nguyên mật khẩu, khóa, cổng và trạng
+thái cho phép/thu hồi của từng máy.
+
+~~~bash
+sudo python3 - <<'PY'
+import contextlib, grp, runpy
+
+relay = runpy.run_path("/usr/local/lib/vpn20-relay/relay.py")
+limit = relay["bandwidth"]("0")
+m = relay["Manager"](gid=grp.getgrnam("vpn20-relay").gr_gid)
+
+with m.lock():
+    s = m.state()
+    s["default_limit"] = limit
+    for client in s["clients"].values():
+        client["limit"] = limit
+    with contextlib.closing(m.database()) as db, db:
+        db.execute("UPDATE clients SET bandwidth = ?", (limit,))
+    m.save(s)
+
+print("Đã đặt giới hạn tốc độ relay:", limit)
+PY
+~~~
+
+Sau khi thấy thông báo thành công, khởi động lại relay để các kết nối hiện có
+nhận mức mới, rồi kiểm tra:
+
+~~~bash
+sudo systemctl restart vpn20-relay.service
+sudo systemctl is-active vpn20-relay.service
+sudo vpn20-relay list
+~~~
+
+Dịch vụ cần trả về `active`; cột ngay trước `enabled` hoặc `revoked` hiển thị
+giới hạn mới, ví dụ `0` thay cho `1MB`. Kết nối ngắt vài giây rồi VPN20 tự nối
+lại. Với client tích hợp trong VPN20 1.4.0 trở lên, không cần nhập lại mật khẩu
+hay tải lại `.conf`/QR trên thiết bị WireGuard.
+
+Khi **cài mới**, có thể thêm `--limit 0` vào lệnh chạy bộ cài để đặt mặc định
+không giới hạn ngay từ đầu. Chạy lại bộ cài với `--limit` chỉ đổi mức mặc định;
+máy đã đăng ký vẫn giữ mức riêng, nên dùng đoạn lệnh trên để đổi cả máy đang dùng.
+Máy còn dùng frpc riêng từ profile cũ có thể có thêm giới hạn trong `frpc.toml`;
+cần đồng bộ giới hạn phía client đó nếu muốn tăng tốc độ.
+
 ## Nâng cấp relay đang có
 
 Chạy lại lệnh cài đặt trên. Khi nâng từ relay **1.0.0**, bộ cài hỏi mật khẩu để
@@ -137,6 +198,7 @@ SSL hay tải CA từ một kết nối chưa được tin cậy. Chứng chỉ 
 qua timer và lệnh `sudo vpn20-relay sync-tls`.
 
 Nếu chọn `--control-port` khác 443, nhập `domain:cổng` trong VPN20 và mở cổng đó
-trên firewall/security group. Giới hạn mặc định là **1 MB/giây cho mỗi máy VPN20**;
-`--limit 0` bỏ giới hạn, `--udp-start`/`--udp-end` đổi dải cổng mà không loại bỏ
-các cổng đã cấp. Bộ cài không tự bật/tắt firewall hoặc thay đổi SSH.
+trên firewall/security group. `--limit` đặt giới hạn mặc định cho máy mới; xem
+[Đổi giới hạn tốc độ relay](#đổi-giới-hạn-tốc-độ-relay) để đổi cả máy đã đăng ký.
+`--udp-start`/`--udp-end` đổi dải cổng mà không loại bỏ các cổng đã cấp.
+Bộ cài không tự bật/tắt firewall hoặc thay đổi SSH.
